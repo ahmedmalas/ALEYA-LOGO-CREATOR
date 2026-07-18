@@ -23,10 +23,18 @@ export default function HomePage() {
           className="absolute inset-0 -z-10"
           style={{
             backgroundImage:
-              "linear-gradient(115deg, rgba(18,54,47,0.88), rgba(18,21,26,0.42)), url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=2000&q=80')",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
+              "radial-gradient(circle at 18% 20%, rgba(176,138,79,0.35), transparent 36%), radial-gradient(circle at 82% 10%, rgba(246,240,228,0.16), transparent 32%), linear-gradient(135deg, #0f2a25 0%, #1f4d45 48%, #1a2420 100%)",
           }}
+        />
+        <div
+          className="pointer-events-none absolute inset-0 -z-10 opacity-30"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(246,240,228,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(246,240,228,0.08) 1px, transparent 1px)",
+            backgroundSize: "72px 72px",
+            maskImage: "linear-gradient(180deg, black, transparent 85%)",
+          }}
+          aria-hidden
         />
         <SiteHeader />
         <section className="mx-auto flex min-h-[calc(100svh-5rem)] w-full max-w-6xl flex-col justify-end px-4 pb-16 pt-10 md:px-8">
