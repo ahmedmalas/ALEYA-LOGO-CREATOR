@@ -21,6 +21,12 @@ export function AppShell({
           <Link href="/brand-kits" className="hover:text-[var(--forest)]">
             Brand Kits
           </Link>
+          <Link href="/gallery" className="hidden hover:text-[var(--forest)] sm:inline">
+            Gallery
+          </Link>
+          <Link href="/pricing" className="hidden hover:text-[var(--forest)] md:inline">
+            Pricing
+          </Link>
           {email ? <span className="hidden text-black/45 md:inline">{email}</span> : null}
           <form action="/auth/signout" method="post">
             <button className="btn btn-secondary px-3 py-2 text-xs" type="submit">

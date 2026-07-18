@@ -32,8 +32,14 @@ export async function updateSession(request: NextRequest) {
     path === "/" ||
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
+    path.startsWith("/gallery") ||
+    path.startsWith("/pricing") ||
     path.startsWith("/auth") ||
     path.startsWith("/integrate") ||
+    path.startsWith("/sitemap") ||
+    path.startsWith("/robots") ||
+    path.startsWith("/opengraph-image") ||
+    path.startsWith("/twitter-image") ||
     path.startsWith("/api/health") ||
     path.startsWith("/api/integrate/validate");
 
