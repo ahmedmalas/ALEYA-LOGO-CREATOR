@@ -237,7 +237,10 @@ export default function HomePage() {
               <Link href="/signup" className="btn bg-[#f6f0e4] text-[var(--forest-deep)]">
                 Get Started
               </Link>
-              <Link href="/gallery" className="btn btn-secondary border-[#f6f0e4] text-[#f6f0e4]">
+              <Link
+                href="/gallery"
+                className="btn border border-[#f6f0e4] bg-transparent text-[#f6f0e4] hover:bg-[rgba(246,240,228,0.08)]"
+              >
                 Browse examples
               </Link>
             </div>
