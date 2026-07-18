@@ -12,15 +12,87 @@ const fraunces = Fraunces({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aleya-logo-creator.vercel.app";
+
 export const metadata: Metadata = {
-  title: "ALEYA Logo Creator",
-  description: "Standalone brand identity and logo generation for Aleya businesses",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "ALEYA Logo Creator",
+    template: "%s · ALEYA Logo Creator",
+  },
+  description:
+    "Generate distinct brand marks, refine concepts, and export reusable Brand Kits with SVG and PNG assets.",
+  applicationName: "ALEYA Logo Creator",
+  keywords: [
+    "logo creator",
+    "brand kit",
+    "logo generator",
+    "SVG logo",
+    "ALEYA",
+    "brand identity",
+  ],
+  authors: [{ name: "ALEYA" }],
+  openGraph: {
+    type: "website",
+    locale: "en_AU",
+    url: siteUrl,
+    siteName: "ALEYA Logo Creator",
+    title: "ALEYA Logo Creator",
+    description:
+      "Standalone logo creation with multi-concept generation, Brand Kits, and usable exports.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ALEYA Logo Creator",
+    description:
+      "Generate, refine, and export brand marks with reusable Brand Kits.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: "/",
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "ALEYA Logo Creator",
+  applicationCategory: "DesignApplication",
+  operatingSystem: "Web",
+  url: siteUrl,
+  description:
+    "Generate distinct brand marks, refine concepts, and export reusable Brand Kits with SVG and PNG assets.",
+  offers: [
+    {
+      "@type": "Offer",
+      name: "Free",
+      price: "0",
+      priceCurrency: "USD",
+      description: "20 logo generations per hour, 3 Brand Kit ZIP downloads per day",
+    },
+    {
+      "@type": "Offer",
+      name: "Pro",
+      price: "29",
+      priceCurrency: "USD",
+      description: "200 logo generations per hour, unlimited Brand Kit ZIP downloads",
+    },
+  ],
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${dmSans.variable} ${fraunces.variable} h-full`}>
-      <body className="min-h-full antialiased">{children}</body>
+      <body className="min-h-full antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

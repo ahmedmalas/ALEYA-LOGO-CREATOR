@@ -1,5 +1,6 @@
 "use client";
 
+import { ConceptSkeletonGrid } from "@/components/ui/loading-block";
 import { useMemo, useState } from "react";
 
 type Concept = {
@@ -198,61 +199,83 @@ export function ProjectStudio({
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {concepts.map((concept, index) => (
-          <article
-            key={concept.id}
-            className={`panel animate-rise overflow-hidden rounded-2xl ${focus?.id === concept.id ? "ring-2 ring-[var(--forest)]" : ""}`}
-            style={{ animationDelay: `${index * 70}ms` }}
-          >
-            <button
-              type="button"
-              className="block w-full text-left"
-              onClick={() => setFocusId(concept.id)}
-            >
-              <div
-                className="flex min-h-56 items-center justify-center p-6"
-                style={{ background: previewMode === "light" ? "#F7F4EF" : "#121212" }}
-                dangerouslySetInnerHTML={{
-                  __html: concept.svg_markup ?? "<p>No preview</p>",
-                }}
-              />
-              <div className="space-y-2 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-lg">{concept.title}</h2>
-                  {concept.is_selected ? (
-                    <span className="text-xs uppercase tracking-wide text-[var(--forest)]">Selected</span>
-                  ) : null}
-                </div>
-                <p className="text-sm text-black/55">{concept.layout} · {concept.icon_concept}</p>
-              </div>
-            </button>
-            <div className="flex flex-wrap gap-2 border-t border-black/5 px-4 py-3">
-              <button className="btn btn-secondary px-3 py-2 text-xs" onClick={() => toggleCompare(concept.id)}>
-                {selectedIds.includes(concept.id) ? "In compare" : "Compare"}
-              </button>
-              <button
-                className="btn btn-secondary px-3 py-2 text-xs"
-                disabled={Boolean(busy)}
-                onClick={() => download(concept.id)}
-              >
-                Download
-              </button>
-              <button
-                className="btn btn-primary px-3 py-2 text-xs"
-                disabled={Boolean(busy)}
-                onClick={() => selectFinal(concept.id)}
-              >
-                Select final
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
+      {busy === "generate" || busy === "regenerate" || busy === "refine" ? (
+        <div className="space-y-3">
+          <p className="animate-pulse-soft text-sm text-[var(--forest-deep)]" role="status">
+            {busy === "refine"
+              ? "Refining your selected concept…"
+              : busy === "regenerate"
+                ? "Regenerating fresh directions…"
+                : "Generating distinct logo concepts…"}
+          </p>
+          <ConceptSkeletonGrid />
+        </div>
+      ) : null}
 
-      {concepts.length === 0 ? (
-        <div className="panel rounded-2xl p-8">
-          <p>No concepts yet. Generate multiple distinct logo directions from your brief.</p>
+      {!(busy === "generate" || busy === "regenerate" || busy === "refine") ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {concepts.map((concept, index) => (
+            <article
+              key={concept.id}
+              className={`panel animate-rise overflow-hidden rounded-2xl ${focus?.id === concept.id ? "ring-2 ring-[var(--forest)]" : ""}`}
+              style={{ animationDelay: `${index * 70}ms` }}
+            >
+              <button
+                type="button"
+                className="block w-full text-left"
+                onClick={() => setFocusId(concept.id)}
+              >
+                <div
+                  className="flex min-h-56 items-center justify-center p-6"
+                  style={{ background: previewMode === "light" ? "#F7F4EF" : "#121212" }}
+                  dangerouslySetInnerHTML={{
+                    __html: concept.svg_markup ?? "<p>No preview</p>",
+                  }}
+                />
+                <div className="space-y-2 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-lg">{concept.title}</h2>
+                    {concept.is_selected ? (
+                      <span className="text-xs uppercase tracking-wide text-[var(--forest)]">Selected</span>
+                    ) : null}
+                  </div>
+                  <p className="text-sm text-black/55">{concept.layout} · {concept.icon_concept}</p>
+                </div>
+              </button>
+              <div className="flex flex-wrap gap-2 border-t border-black/5 px-4 py-3">
+                <button className="btn btn-secondary px-3 py-2 text-xs" onClick={() => toggleCompare(concept.id)}>
+                  {selectedIds.includes(concept.id) ? "In compare" : "Compare"}
+                </button>
+                <button
+                  className="btn btn-secondary px-3 py-2 text-xs"
+                  disabled={Boolean(busy)}
+                  onClick={() => download(concept.id)}
+                >
+                  Download
+                </button>
+                <button
+                  className="btn btn-primary px-3 py-2 text-xs"
+                  disabled={Boolean(busy)}
+                  onClick={() => selectFinal(concept.id)}
+                >
+                  Select final
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {concepts.length === 0 && !busy ? (
+        <div className="panel rounded-3xl p-8 md:p-10">
+          <h2 className="text-xl">Ready to generate</h2>
+          <p className="mt-2 max-w-xl text-black/60">
+            Your brief is saved. Generate four distinct directions, then compare, refine, and select
+            a final mark to create a Brand Kit.
+          </p>
+          <button className="btn btn-primary mt-6" disabled={Boolean(busy)} onClick={() => generate("generate")}>
+            Generate concepts
+          </button>
         </div>
       ) : null}
 
