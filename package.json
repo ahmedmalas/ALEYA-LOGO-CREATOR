@@ -1,0 +1,40 @@
+{
+  "name": "aleya-logo-creator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "tsx scripts/e2e-generation.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.3",
+    "@supabase/supabase-js": "^2.110.7",
+    "clsx": "^2.1.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^1.25.0",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sharp": "^0.35.3",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "playwright": "^1.61.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
