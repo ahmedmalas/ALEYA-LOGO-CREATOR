@@ -36,7 +36,7 @@ export default function HomePage() {
           }}
           aria-hidden
         />
-        <SiteHeader />
+        <SiteHeader tone="dark" />
         <section className="mx-auto flex min-h-[calc(100svh-5rem)] w-full max-w-6xl flex-col justify-end px-4 pb-16 pt-10 md:px-8">
           <p className="brand animate-rise text-5xl text-[#f6f0e4] md:text-7xl">ALEYA</p>
           <h1

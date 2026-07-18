@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: "Pricing",
   description:
     "ALEYA Logo Creator Free and Pro plans with clear generation and export limits. No payment required to start.",
+  alternates: { canonical: "/pricing" },
 };
 
 export default function PricingPage() {

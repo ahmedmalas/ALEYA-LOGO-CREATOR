@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "Example Gallery",
   description:
     "Browse sample ALEYA logos across industries and styles. No account required.",
+  alternates: { canonical: "/gallery" },
 };
 
 const industries = Array.from(new Set(GALLERY_SAMPLES.map((s) => s.industry)));
