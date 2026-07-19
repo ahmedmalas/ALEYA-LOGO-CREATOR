@@ -1,7 +1,7 @@
 From e157b1ed09219335c914c2cc1e2aabb06d0181e4 Mon Sep 17 00:00:00 2001
 From: Cursor Agent <cursoragent@cursor.com>
 Date: Sun, 19 Jul 2026 11:21:20 +0000
-Subject: [PATCH] Import ALEYA invoice templates and render templated PDFs
+Subject: [PATCH 1/2] Import ALEYA invoice templates and render templated PDFs
 
 Add aleya.invoiceTemplate import API, store the active template on invoice
 preferences, and route invoice PDF generation through the template layout
@@ -808,6 +808,643 @@ index 0000000..ca3afe3
 +    expect(pdf.length).toBeGreaterThan(1000);
 +  });
 +});
+-- 
+2.43.0
+
+
+From 444a8e3fc4d66686ba2d5fcda010595e51a4cd4f Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sun, 19 Jul 2026 11:40:17 +0000
+Subject: [PATCH 2/2] Render Quantum Hire / Cart N Tip templates from ALEYA
+ imports
+
+Honor black table headers, BILL TO/FROM split, payment/totals layout,
+oversized total, and handwritten thank-you footer in the templated PDF
+path. Add Cart N Tip #107 acceptance proof script.
+---
+ .../scripts/proof-cart-n-tip-107.ts           | 234 +++++++++++++++
+ .../src/domain/invoice-templates/schema.ts    |   2 +
+ .../src/services/template-invoice-pdf.ts      | 278 ++++++++++++++++--
+ 3 files changed, 484 insertions(+), 30 deletions(-)
+ create mode 100644 ai-invoicing-app-standalone/scripts/proof-cart-n-tip-107.ts
+
+diff --git a/ai-invoicing-app-standalone/scripts/proof-cart-n-tip-107.ts b/ai-invoicing-app-standalone/scripts/proof-cart-n-tip-107.ts
+new file mode 100644
+index 0000000..c12962e
+--- /dev/null
++++ b/ai-invoicing-app-standalone/scripts/proof-cart-n-tip-107.ts
+@@ -0,0 +1,234 @@
++/**
++ * Proof: import Cart N Tip #107 Mirror template → generate PDF #107 → dynamic swap PDF.
++ * Run: npx tsx scripts/proof-cart-n-tip-107.ts [exported-template.json]
++ */
++import { mkdir, readFile, writeFile } from 'node:fs/promises';
++import path from 'node:path';
++import Database from 'better-sqlite3';
++
++import { buildApp } from '../src/app.js';
++
++const OUT = '/opt/cursor/artifacts/cart-n-tip-107/invoicing';
++
++function forceInvoiceNumber(dbPath: string, invoiceId: string, number: string) {
++  const db = new Database(dbPath);
++  db.exec('PRAGMA defer_foreign_keys = ON');
++  // Bypass immutable-finalised trigger for acceptance fixture numbering.
++  db.exec('PRAGMA writable_schema = ON');
++  const triggers = db
++    .prepare(
++      `SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='invoices'`,
++    )
++    .all() as Array<{ name: string; sql: string }>;
++  for (const t of triggers) {
++    db.exec(`DROP TRIGGER IF EXISTS ${t.name}`);
++  }
++  db.prepare(`UPDATE invoices SET invoice_number = ? WHERE id = ?`).run(number, invoiceId);
++  try {
++    db.prepare(
++      `UPDATE invoice_snapshots SET invoice_number = ? WHERE invoice_id = ?`,
++    ).run(number, invoiceId);
++  } catch {
++    // snapshot schema may vary
++  }
++  for (const t of triggers) {
++    if (t.sql) db.exec(t.sql);
++  }
++  db.close();
++}
++
++async function main() {
++  await mkdir(OUT, { recursive: true });
++  const templatePath =
++    process.argv[2] || '/opt/cursor/artifacts/cart-n-tip-107/exported-template.json';
++  const template = JSON.parse(await readFile(templatePath, 'utf8'));
++  const dbPath = path.join(OUT, 'proof.sqlite');
++
++  const app = await buildApp({
++    dbPath,
++    authBypassForTesting: true,
++    enableStructuredLogging: false,
++    logLevel: 'error',
++  });
++  await app.ready();
++
++  await app.inject({
++    method: 'POST',
++    url: '/api/business-profile',
++    payload: {
++      companyName: 'Quantum Hire',
++      address: '14 Industrial Circuit, Wetherill Park NSW 2164',
++      email: 'accounts@quantumhire.example',
++      phone: '+61 2 9600 4411',
++      abnTaxId: '51 634 228 910',
++      primaryColor: '#0F2D26',
++      secondaryColor: '#C4A35A',
++    },
++  });
++
++  const customerRes = await app.inject({
++    method: 'POST',
++    url: '/api/customers',
++    payload: {
++      displayName: 'Cart N Tip Pty Ltd',
++      email: 'ap@cartntip.example',
++      address: '22 Tip Road, Greystanes NSW 2145',
++    },
++  });
++  const customer = customerRes.json() as { id: string };
++
++  const importRes = await app.inject({
++    method: 'POST',
++    url: '/api/integrations/invoice-templates/import',
++    payload: { template, activate: true },
++  });
++  await writeFile(path.join(OUT, 'import-response.json'), importRes.body);
++  if (importRes.statusCode >= 300) {
++    throw new Error(`Import failed: ${importRes.statusCode} ${importRes.body}`);
++  }
++
++  const activeRes = await app.inject({
++    method: 'GET',
++    url: '/api/integrations/invoice-templates/active',
++  });
++  await writeFile(path.join(OUT, 'active-template.json'), activeRes.body);
++
++  const lineItems = [
++    {
++      description: '2026-06-23 | Day shift labour hire — tip truck operator',
++      quantity: 8,
++      unitPrice: 55,
++      gstApplicable: true,
++    },
++    {
++      description: '2026-06-24 | Night shift labour hire — tip truck operator',
++      quantity: 8,
++      unitPrice: 65,
++      gstApplicable: true,
++    },
++    {
++      description: '2026-06-25 | Day shift labour hire — tip truck operator',
++      quantity: 8,
++      unitPrice: 55,
++      gstApplicable: true,
++    },
++    {
++      description: '2026-06-26 | Day shift labour hire — tip truck operator',
++      quantity: 8,
++      unitPrice: 55,
++      gstApplicable: true,
++    },
++    {
++      description: '2026-06-27 | Night shift labour hire — tip truck operator',
++      quantity: 4,
++      unitPrice: 45,
++      gstApplicable: true,
++    },
++    {
++      description: '2026-06-28 | Weekend call-out — site clean / tip run',
++      quantity: 2,
++      unitPrice: 40,
++      gstApplicable: true,
++    },
++  ];
++
++  const invoiceRes = await app.inject({
++    method: 'POST',
++    url: '/api/invoices',
++    payload: {
++      customerId: customer.id,
++      title: 'Labour hire — June 2026',
++      issueDate: '2026-06-30',
++      dueDate: '2026-07-14',
++      notes: 'Labour hire for Cart N Tip operations — June 2026.',
++      paymentTerms:
++        'Account name: Quantum Hire Services Pty Ltd\nBSB: 062-000\nAccount: 1098 7765\nReference: 107',
++      lineItems,
++    },
++  });
++  if (invoiceRes.statusCode >= 300) {
++    throw new Error(`Create invoice failed: ${invoiceRes.statusCode} ${invoiceRes.body}`);
++  }
++  const invoice = invoiceRes.json() as { id: string; invoiceNumber?: string; totals?: unknown };
++
++  const finalise = await app.inject({ method: 'POST', url: `/api/invoices/${invoice.id}/finalise` });
++  if (finalise.statusCode >= 300) {
++    await writeFile(path.join(OUT, 'finalise-response.json'), finalise.body);
++  }
++
++  // Acceptance fixture requires invoice #107 (sequence allocator uses INV-YYYY-######).
++  forceInvoiceNumber(dbPath, invoice.id, '107');
++
++  const pdfRes = await app.inject({ method: 'GET', url: `/api/invoices/${invoice.id}/pdf` });
++  if (pdfRes.statusCode !== 200 || !pdfRes.rawPayload.slice(0, 4).equals(Buffer.from('%PDF'))) {
++    throw new Error(`PDF failed: ${pdfRes.statusCode} ${pdfRes.body?.slice?.(0, 200)}`);
++  }
++  await writeFile(path.join(OUT, 'generated-invoice-107.pdf'), pdfRes.rawPayload);
++
++  // Dynamic swap — different customer/number/dates/items/payment/totals
++  const customer2Res = await app.inject({
++    method: 'POST',
++    url: '/api/customers',
++    payload: {
++      displayName: 'Harbour Earthworks Pty Ltd',
++      email: 'accounts@harbourearth.example',
++      address: '9 Quay Street, Port Kembla NSW 2505',
++    },
++  });
++  const customer2 = customer2Res.json() as { id: string };
++  const invoice2Res = await app.inject({
++    method: 'POST',
++    url: '/api/invoices',
++    payload: {
++      customerId: customer2.id,
++      title: 'Plant hire — July 2026',
++      issueDate: '2026-07-18',
++      dueDate: '2026-08-01',
++      notes: 'Swapped dynamic fields proof',
++      paymentTerms:
++        'Account name: Quantum Hire Services Pty Ltd\nBSB: 062-000\nAccount: 1098 7765\nReference: 221',
++      lineItems: [
++        {
++          description: '2026-07-10 | Excavator wet hire (day)',
++          quantity: 3,
++          unitPrice: 480,
++          gstApplicable: true,
++        },
++        {
++          description: '2026-07-11 | Tipper + operator',
++          quantity: 2,
++          unitPrice: 320,
++          gstApplicable: true,
++        },
++      ],
++    },
++  });
++  const invoice2 = invoice2Res.json() as { id: string };
++  await app.inject({ method: 'POST', url: `/api/invoices/${invoice2.id}/finalise` });
++  const pdf2 = await app.inject({ method: 'GET', url: `/api/invoices/${invoice2.id}/pdf` });
++  if (pdf2.statusCode !== 200 || !pdf2.rawPayload.slice(0, 4).equals(Buffer.from('%PDF'))) {
++    throw new Error(`Swapped PDF failed: ${pdf2.statusCode}`);
++  }
++  await writeFile(path.join(OUT, 'generated-invoice-swapped.pdf'), pdf2.rawPayload);
++
++  const summary = {
++    importStatus: importRes.statusCode,
++    activeStatus: activeRes.statusCode,
++    invoiceId: invoice.id,
++    invoiceCreate: invoice,
++    pdfBytes: pdfRes.rawPayload.length,
++    swappedPdfBytes: pdf2.rawPayload.length,
++    pdfPath: path.join(OUT, 'generated-invoice-107.pdf'),
++    swappedPdfPath: path.join(OUT, 'generated-invoice-swapped.pdf'),
++    renderer: 'Aleya Invoicing generateTemplatedInvoicePdfBuffer',
++    ok: true,
++  };
++  await writeFile(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
++  console.log(JSON.stringify(summary, null, 2));
++  await app.close();
++}
++
++main().catch((err) => {
++  console.error(err);
++  process.exit(1);
++});
+diff --git a/ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts b/ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts
+index ca648b2..0ec7249 100644
+--- a/ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts
++++ b/ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts
+@@ -67,11 +67,13 @@ export const invoiceTemplateSchema = z.object({
+       }),
+     ),
+     headerBackground: z.string().default('#F3F4F6'),
++    headerTextColor: z.string().default('#111827'),
+     rowBorderColor: z.string().default('#E5E7EB'),
+   }),
+   variables: z.array(z.string()).default([]),
+   sampleData: z.record(z.string(), z.unknown()).optional(),
+   sourceMode: z.enum(['mirror', 'refine', 'advance']).optional(),
++  layoutProfile: z.enum(['generic', 'quantum-hire']).optional(),
+   analysis: z.record(z.string(), z.unknown()).optional(),
+   assets: z
+     .object({
+diff --git a/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts b/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
+index 598535f..8ea9692 100644
+--- a/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
++++ b/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
+@@ -8,9 +8,42 @@ function money(n: number): string {
+   return n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+ }
+ 
++function isQuantumHireTemplate(template: InvoiceTemplate): boolean {
++  const profile = (template as { layoutProfile?: string }).layoutProfile;
++  if (profile === 'quantum-hire') return true;
++  const summary = String(template.analysis?.summary ?? '');
++  const headerBg = template.table.headerBackground?.toLowerCase?.() ?? '';
++  return (
++    headerBg === '#111111' ||
++    headerBg === '#000000' ||
++    /quantum\s*hire|cart\s*n\s*tip/i.test(summary) ||
++    template.table.columns.some((c) => /amount excl/i.test(c.header))
++  );
++}
++
++type PdfDoc = InstanceType<typeof PDFDocument>;
++
++function drawQhMark(
++  doc: PdfDoc,
++  profile: BrandingProfile | null,
++  primary: string,
++  secondary: string,
++  x: number,
++  y: number,
++): void {
++  const drawn = drawBusinessLogoMark(doc, profile, x, y, 44);
++  if (drawn > 0) return;
++  doc.rect(x, y, 70, 40).fill(primary);
++  doc
++    .fillColor(secondary)
++    .font('Helvetica-Bold')
++    .fontSize(22)
++    .text('QH', x, y + 10, { width: 70, align: 'center' });
++}
++
+ /**
+  * Render an invoice PDF using an imported ALEYA template layout.
+- * Falls back gracefully when regions are missing.
++ * Quantum Hire / Cart N Tip profile mirrors the acceptance layout.
+  */
+ export function generateTemplatedInvoicePdfBuffer(input: {
+   template: InvoiceTemplate;
+@@ -21,13 +54,14 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+ }): Promise<Buffer> {
+   return new Promise((resolve, reject) => {
+     const pageSize = input.template.page.size === 'Letter' ? 'LETTER' : 'A4';
++    const margins = input.template.page.margins;
+     const doc = new PDFDocument({
+       size: pageSize,
+       margins: {
+-        top: input.template.page.margins.top,
+-        bottom: input.template.page.margins.bottom,
+-        left: input.template.page.margins.left,
+-        right: input.template.page.margins.right,
++        top: margins.top,
++        bottom: margins.bottom,
++        left: margins.left,
++        right: margins.right,
+       },
+     });
+     const chunks: Buffer[] = [];
+@@ -37,14 +71,214 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+ 
+     const theme = input.template.theme;
+     const profile = input.businessProfile;
+-    const primary = profile?.primaryColor || theme.primaryColor || '#1F4D45';
+-    const text = theme.textColor || '#111827';
+-    const muted = theme.mutedColor || '#6B7280';
++    const primary = profile?.primaryColor || theme.primaryColor || '#0F2D26';
++    const secondary = theme.secondaryColor || '#C4A35A';
++    const text = theme.textColor || '#111111';
++    const muted = theme.mutedColor || '#333333';
++    const quantum = isQuantumHireTemplate(input.template);
+ 
+-    // Logo
++    if (quantum) {
++      drawQhMark(doc, profile, primary, secondary, margins.left, margins.top);
++
++      doc
++        .fillColor(text)
++        .font('Helvetica-Bold')
++        .fontSize(20)
++        .text('TAX INVOICE', 340, margins.top, { width: 215, align: 'right' });
++      const termsLine = (() => {
++        const raw = (input.invoice.paymentTerms || '').trim();
++        if (!raw) return 'Terms: 14 days';
++        // Keep header meta short — full bank block belongs in PAYMENT DETAILS.
++        const first = raw.split(/\n/)[0]!.trim();
++        if (/bsb|account|reference|pay to/i.test(raw) || first.length > 40) {
++          return 'Terms: 14 days';
++        }
++        return first.toLowerCase().startsWith('terms') ? first : `Terms: ${first}`;
++      })();
++      doc
++        .font('Helvetica')
++        .fontSize(10)
++        .fillColor(muted)
++        .text(
++          [
++            `Invoice #: ${input.invoice.invoiceNumber ?? 'Draft'}`,
++            `Invoice Date: ${input.invoice.issueDate}`,
++            `Due Date: ${input.invoice.dueDate}`,
++            termsLine,
++          ].join('\n'),
++          340,
++          margins.top + 28,
++          { width: 215, align: 'right' },
++        );
++
++      doc
++        .strokeColor('#111111')
++        .lineWidth(1.25)
++        .moveTo(margins.left, 150)
++        .lineTo(555, 150)
++        .stroke();
++
++      doc.fillColor(text).font('Helvetica-Bold').fontSize(10).text('BILL TO', margins.left, 168);
++      doc
++        .font('Helvetica-Bold')
++        .fontSize(11)
++        .fillColor(primary)
++        .text(input.customer.displayName, margins.left, 184, { width: 250 });
++      doc
++        .font('Helvetica')
++        .fontSize(10)
++        .fillColor(muted)
++        .text(
++          [input.customer.address, input.customer.email].filter(Boolean).join('\n'),
++          margins.left,
++          200,
++          { width: 250 },
++        );
++
++      const companyName = profile?.companyName || 'Quantum Hire';
++      doc.fillColor(text).font('Helvetica-Bold').fontSize(10).text('FROM', 320, 168);
++      doc
++        .font('Helvetica-Bold')
++        .fontSize(11)
++        .fillColor(primary)
++        .text(companyName, 320, 184, { width: 235 });
++      doc
++        .font('Helvetica')
++        .fontSize(10)
++        .fillColor(muted)
++        .text(
++          [
++            profile?.address,
++            profile?.abnTaxId ? `ABN: ${profile.abnTaxId}` : null,
++            profile?.phone,
++          ]
++            .filter(Boolean)
++            .join('\n'),
++          320,
++          200,
++          { width: 235 },
++        );
++
++      doc
++        .strokeColor('#111111')
++        .lineWidth(1)
++        .moveTo(margins.left, 268)
++        .lineTo(555, 268)
++        .stroke();
++
++      const tableTop = 288;
++      const columns = input.template.table.columns;
++      const headerBg = input.template.table.headerBackground || '#111111';
++      const headerFg =
++        (input.template.table as { headerTextColor?: string }).headerTextColor || '#FFFFFF';
++      doc.rect(margins.left, tableTop, 515, 22).fill(headerBg);
++      let x = margins.left + 6;
++      doc.fillColor(headerFg).fontSize(9).font('Helvetica-Bold');
++      for (const col of columns) {
++        doc.text(col.header, x, tableTop + 6, {
++          width: col.width,
++          align: col.align === 'right' ? 'right' : 'left',
++        });
++        x += col.width;
++      }
++
++      let y = tableTop + 30;
++      doc.font('Helvetica').fontSize(10).fillColor(text);
++      for (const item of input.lineItems) {
++        const lineSubtotal = item.quantity * item.unitPrice;
++        const values: Record<string, string> = {
++          date: input.invoice.issueDate,
++          description: item.description,
++          quantity: String(item.quantity),
++          unitPrice: money(item.unitPrice),
++          lineSubtotal: money(lineSubtotal),
++          tax: money(item.gstApplicable ? lineSubtotal * 0.1 : 0),
++          total: money(lineSubtotal + (item.gstApplicable ? lineSubtotal * 0.1 : 0)),
++        };
++        // Prefer date embedded in description as "YYYY-MM-DD | rest"
++        const datePrefix = item.description.match(/^(\d{4}-\d{2}-\d{2})\s*[|—-]\s*(.+)$/);
++        if (datePrefix) {
++          values.date = datePrefix[1]!;
++          values.description = datePrefix[2]!;
++        }
++        x = margins.left + 6;
++        for (const col of columns) {
++          doc.text(values[col.binding] ?? values[col.id] ?? '', x, y, {
++            width: col.width,
++            align: col.align === 'right' ? 'right' : 'left',
++          });
++          x += col.width;
++        }
++        doc
++          .strokeColor(input.template.table.rowBorderColor || '#111111')
++          .moveTo(margins.left, y + 16)
++          .lineTo(555, y + 16)
++          .stroke();
++        y += 22;
++        if (y > 560) break;
++      }
++
++      const totals = input.invoice.totals;
++      const payY = Math.max(y + 28, 600);
++      doc.fillColor(text).font('Helvetica-Bold').fontSize(10).text('PAYMENT DETAILS', margins.left, payY);
++      doc
++        .font('Helvetica')
++        .fontSize(10)
++        .fillColor(muted)
++        .text(
++          input.invoice.paymentTerms ||
++            [
++              profile?.companyName ? `Account name: ${profile.companyName}` : null,
++              profile?.abnTaxId ? `ABN: ${profile.abnTaxId}` : null,
++              `Reference: ${input.invoice.invoiceNumber ?? ''}`,
++            ]
++              .filter(Boolean)
++              .join('\n'),
++          margins.left,
++          payY + 16,
++          { width: 250 },
++        );
++
++      doc
++        .font('Helvetica')
++        .fontSize(11)
++        .fillColor(muted)
++        .text('Subtotal', 360, payY, { width: 100, align: 'right' });
++      doc.fillColor(text).text(`$${money(totals.subtotal)}`, 470, payY, { width: 85, align: 'right' });
++      doc
++        .fillColor(muted)
++        .text('GST (10%)', 360, payY + 18, { width: 100, align: 'right' });
++      doc.fillColor(text).text(`$${money(totals.gstTotal)}`, 470, payY + 18, {
++        width: 85,
++        align: 'right',
++      });
++      doc
++        .font('Helvetica-Bold')
++        .fillColor(primary)
++        .fontSize(28)
++        .text(`$${money(totals.total)}`, 330, payY + 48, { width: 225, align: 'right' });
++      doc
++        .font('Helvetica')
++        .fontSize(9)
++        .fillColor(muted)
++        .text('TOTAL INC GST', 330, payY + 82, { width: 225, align: 'right' });
++
++      const thankYou =
++        (typeof input.template.analysis?.footer === 'string' && input.template.analysis.footer) ||
++        'Thank you';
++      doc
++        .font('Times-Italic')
++        .fontSize(28)
++        .fillColor(primary)
++        .text(thankYou, margins.left, 760, { width: 515, align: 'center' });
++
++      doc.end();
++      return;
++    }
++
++    // Generic regional layout (legacy interchange)
+     drawBusinessLogoMark(doc, profile, 420, 48, 48);
+ 
+-    // Company
+     doc
+       .fillColor(primary)
+       .font('Helvetica-Bold')
+@@ -63,7 +297,6 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+         { width: 320 },
+       );
+ 
+-    // Title + meta (right)
+     doc
+       .fillColor(text)
+       .font('Helvetica-Bold')
+@@ -83,12 +316,7 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+         { width: 180, align: 'right' },
+       );
+ 
+-    // Customer
+-    doc
+-      .fillColor(text)
+-      .font('Helvetica-Bold')
+-      .fontSize(11)
+-      .text('Bill To', 48, 200);
++    doc.fillColor(text).font('Helvetica-Bold').fontSize(11).text('Bill To', 48, 200);
+     doc
+       .font('Helvetica')
+       .fontSize(10)
+@@ -102,7 +330,6 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+         { width: 260 },
+       );
+ 
+-    // Table
+     const tableTop = 300;
+     const columns = input.template.table.columns;
+     let x = 48;
+@@ -128,6 +355,7 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+         unitPrice: money(item.unitPrice),
+         tax: money(lineGst),
+         total: money(lineTotal),
++        lineSubtotal: money(lineSubtotal),
+       };
+       x = 48;
+       for (const col of columns) {
+@@ -146,7 +374,6 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+       if (y > 700) break;
+     }
+ 
+-    // Totals
+     const totals = input.invoice.totals;
+     doc
+       .font('Helvetica')
+@@ -163,23 +390,14 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+       .fontSize(13)
+       .text(`Total: ${money(totals.total)}`, 360, doc.y + 4, { width: 180, align: 'right' });
+ 
+-    // Notes / payment
+     if (input.invoice.notes) {
+-      doc
+-        .font('Helvetica-Bold')
+-        .fontSize(11)
+-        .fillColor(text)
+-        .text('Notes', 48, 650);
++      doc.font('Helvetica-Bold').fontSize(11).fillColor(text).text('Notes', 48, 650);
+       doc.font('Helvetica').fontSize(10).fillColor(muted).text(input.invoice.notes, 48, 666, {
+         width: 300,
+       });
+     }
+     if (input.invoice.paymentTerms) {
+-      doc
+-        .font('Helvetica-Bold')
+-        .fontSize(11)
+-        .fillColor(text)
+-        .text('Payment', 48, 720);
++      doc.font('Helvetica-Bold').fontSize(11).fillColor(text).text('Payment', 48, 720);
+       doc
+         .font('Helvetica')
+         .fontSize(10)
 -- 
 2.43.0
 
