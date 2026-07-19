@@ -1,3 +1,4 @@
+import { summarizeReferencesForPrompt } from "@/lib/references/brief";
 import { sanitizeHexColor } from "@/lib/security/colors";
 import type {
   ConceptPalette,
@@ -165,6 +166,7 @@ export function composeSvgConcepts(brief: LogoBrief, count: number, seed = "seed
     const iconConcept =
       brief.iconIdeas?.trim() ||
       `${brief.industry} mark with ${brief.personality} geometry (variant ${i + 1})`;
+    const referenceSummary = summarizeReferencesForPrompt(brief.references);
     const prompt = [
       `Logo for ${brief.businessName}`,
       brief.tagline ? `tagline "${brief.tagline}"` : null,
@@ -176,6 +178,7 @@ export function composeSvgConcepts(brief: LogoBrief, count: number, seed = "seed
       `palette ${palette.primary}, ${palette.secondary}, ${palette.accent}`,
       brief.avoidColors.length ? `avoid ${brief.avoidColors.join(", ")}` : null,
       `icon: ${iconConcept}`,
+      referenceSummary || null,
       `seed ${seed}:${i}`,
     ]
       .filter(Boolean)
@@ -190,7 +193,13 @@ export function composeSvgConcepts(brief: LogoBrief, count: number, seed = "seed
       typography: fonts,
       svgMarkup,
       provider: "svg-composer",
-      providerMetadata: { seed, variant: i, algorithm: "aleya-svg-v1" },
+      providerMetadata: {
+        seed,
+        variant: i,
+        algorithm: "aleya-svg-v1",
+        referenceIds: (brief.references ?? []).map((r) => r.id),
+        referenceFilenames: (brief.references ?? []).map((r) => r.filename),
+      },
     });
   }
   return concepts;

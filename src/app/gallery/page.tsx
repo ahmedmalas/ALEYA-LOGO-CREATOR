@@ -1,9 +1,11 @@
+import { MarketingCtaGroup } from "@/components/marketing/marketing-ctas";
 import { SampleLogo } from "@/components/marketing/sample-logo";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { SiteHeader } from "@/components/marketing/site-header";
+import { galleryBandCtas } from "@/lib/auth/marketing-ctas";
+import { getAuthState } from "@/lib/auth/session";
 import { GALLERY_SAMPLES } from "@/lib/gallery-samples";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Example Gallery",
@@ -14,9 +16,12 @@ export const metadata: Metadata = {
 
 const industries = Array.from(new Set(GALLERY_SAMPLES.map((s) => s.industry)));
 
-export default function GalleryPage() {
+export default async function GalleryPage() {
+  const { signedIn } = await getAuthState();
+  const ctas = galleryBandCtas(signedIn);
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-auth={signedIn ? "signed-in" : "signed-out"}>
       <SiteHeader solid />
       <main className="mx-auto max-w-6xl px-4 py-14 md:px-8">
         <h1 className="animate-rise text-4xl md:text-5xl">Example gallery</h1>
@@ -73,17 +78,10 @@ export default function GalleryPage() {
         <div className="mt-14 rounded-[2rem] border border-black/8 bg-[rgba(31,77,69,0.06)] px-6 py-10 md:px-10">
           <h2 className="text-2xl">Create your own direction</h2>
           <p className="mt-2 max-w-xl text-black/60">
-            Start a project with your business name, style, and colours — then generate concepts you
-            can refine and export.
+            Start a project with your business name, style, colours, and reference materials — then
+            generate concepts you can refine and export.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/signup" className="btn btn-primary">
-              Get Started
-            </Link>
-            <Link href="/pricing" className="btn btn-secondary">
-              View pricing
-            </Link>
-          </div>
+          <MarketingCtaGroup ctas={ctas} className="mt-6" data-testid="gallery-ctas" />
         </div>
       </main>
       <SiteFooter />

@@ -1,3 +1,4 @@
+import { loadActiveReferences, withReferences } from "@/lib/references/brief";
 import { runGenerationJob } from "@/lib/logo/generation-service";
 import { ProviderError } from "@/lib/providers";
 import { handleRouteError, jsonError, readJson } from "@/lib/security/api";
@@ -11,6 +12,7 @@ const schema = z.object({
   conceptId: z.string().uuid(),
   instruction: z.string().min(3).max(500),
   idempotencyKey: z.string().min(8).max(120),
+  referenceIds: z.array(z.string().uuid()).optional(),
 });
 
 export async function POST(request: Request) {
@@ -40,18 +42,28 @@ export async function POST(request: Request) {
       return jsonError("Concept not found on this project", 404);
     }
 
-    const brief: LogoBrief = {
-      businessName: project.business_name,
-      tagline: project.tagline ?? undefined,
-      industry: project.industry,
-      personality: project.personality,
-      style: project.style,
-      preferredColors: project.preferred_colors ?? [],
-      avoidColors: project.avoid_colors ?? [],
-      iconIdeas: project.icon_ideas ?? undefined,
-      typographyDirection: project.typography_direction,
-      layoutDirection: project.layout_direction,
-    };
+    const references = await loadActiveReferences(
+      supabase,
+      project.id,
+      user.id,
+      body.referenceIds,
+    );
+
+    const brief: LogoBrief = withReferences(
+      {
+        businessName: project.business_name,
+        tagline: project.tagline ?? undefined,
+        industry: project.industry,
+        personality: project.personality,
+        style: project.style,
+        preferredColors: project.preferred_colors ?? [],
+        avoidColors: project.avoid_colors ?? [],
+        iconIdeas: project.icon_ideas ?? undefined,
+        typographyDirection: project.typography_direction,
+        layoutDirection: project.layout_direction,
+      },
+      references,
+    );
 
     const result = await runGenerationJob({
       supabase,
@@ -64,15 +76,16 @@ export async function POST(request: Request) {
       instruction: body.instruction,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, referencesUsed: references });
   } catch (error) {
     if (error instanceof ProviderError) {
       const status =
         error.code === "rate_limited" ? 429 : error.code === "missing_credentials" ? 503 : 502;
       return NextResponse.json({ error: error.message, code: error.code }, { status });
     }
-    if ((error as { status?: number }).status === 429) {
-      return jsonError(error instanceof Error ? error.message : "Rate limit exceeded", 429);
+    const errStatus = (error as { status?: number }).status;
+    if (errStatus === 429 || errStatus === 402 || errStatus === 403) {
+      return jsonError(error instanceof Error ? error.message : "Limit exceeded", errStatus);
     }
     return handleRouteError(error, "Refine failed");
   }

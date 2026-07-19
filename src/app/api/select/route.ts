@@ -1,4 +1,5 @@
 import { selectConceptAndCreateBrandKit } from "@/lib/logo/generation-service";
+import { PlanLimitError } from "@/lib/plans/enforce";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -40,6 +41,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ brandKit, delivery });
   } catch (error) {
+    if (error instanceof PlanLimitError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Selection failed" },
       { status: 400 },

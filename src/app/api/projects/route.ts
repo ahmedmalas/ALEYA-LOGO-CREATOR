@@ -3,6 +3,7 @@ import {
   INTEGRATION_COOKIE,
   decodeIntegrationClaims,
 } from "@/lib/integration/claims";
+import { assertProjectAllowance, PlanLimitError } from "@/lib/plans/enforce";
 import { handleRouteError, jsonError, readJson } from "@/lib/security/api";
 import { sanitizeColorList } from "@/lib/security/colors";
 import { createClient } from "@/lib/supabase/server";
@@ -52,6 +53,12 @@ export async function POST(request: Request) {
     if (!user) return jsonError("Unauthorized", 401);
 
     const body = await readJson(request, createSchema);
+    try {
+      await assertProjectAllowance(supabase, user.id);
+    } catch (error) {
+      if (error instanceof PlanLimitError) return jsonError(error.message, error.status);
+      throw error;
+    }
     const workspace = await ensureWorkspace(supabase, user.id);
 
     const cookieStore = await cookies();

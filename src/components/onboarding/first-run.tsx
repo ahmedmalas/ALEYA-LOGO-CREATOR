@@ -4,8 +4,8 @@ export function FirstRunOnboarding() {
   return (
     <section className="panel animate-rise mb-8 rounded-3xl p-6 md:p-8">
       <p className="text-xs uppercase tracking-[0.18em] text-[var(--forest)]">Welcome</p>
-      <h2 className="mt-2 text-2xl md:text-3xl">Create your first logo in three steps</h2>
-      <ol className="mt-6 grid gap-4 md:grid-cols-3">
+      <h2 className="mt-2 text-2xl md:text-3xl">Create your first logo without leaving the app</h2>
+      <ol className="mt-6 grid gap-4 md:grid-cols-4">
         {[
           {
             step: "1",
@@ -14,11 +14,16 @@ export function FirstRunOnboarding() {
           },
           {
             step: "2",
+            title: "Upload references",
+            body: "Add logos, sketches, packaging, receipts, screenshots, or PDFs for visual guidance.",
+          },
+          {
+            step: "3",
             title: "Generate concepts",
             body: "Create multiple directions, compare them, and refine the strongest mark.",
           },
           {
-            step: "3",
+            step: "4",
             title: "Save a Brand Kit",
             body: "Select a final logo to keep exports, palette, and typography together.",
           },
@@ -32,7 +37,7 @@ export function FirstRunOnboarding() {
       </ol>
       <div className="mt-6 flex flex-wrap gap-3">
         <Link href="/projects/new" className="btn btn-primary">
-          Create first project
+          Create New Logo
         </Link>
         <Link href="/gallery" className="btn btn-secondary">
           Browse examples

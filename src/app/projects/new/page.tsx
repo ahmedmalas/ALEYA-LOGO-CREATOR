@@ -1,5 +1,6 @@
 "use client";
 
+import { ReferenceUploader } from "@/components/project/reference-uploader";
 import { AppShell } from "@/components/shell";
 import {
   LAYOUTS,
@@ -7,6 +8,7 @@ import {
   PERSONALITIES,
   TYPOGRAPHY_DIRECTIONS,
 } from "@/types/logo";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 
@@ -15,11 +17,13 @@ function NewProjectForm() {
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    setStatus(null);
     const form = new FormData(event.currentTarget);
     const preferredColors = String(form.get("preferredColors") ?? "")
       .split(",")
@@ -60,7 +64,21 @@ function NewProjectForm() {
         );
         return;
       }
-      router.push(`/projects/${json.project.id}`);
+      const projectId = json.project.id as string;
+      setStatus("Project saved. Uploading queued references…");
+      const flushDone = new Promise<void>((resolve) => {
+        const onDone = () => {
+          window.removeEventListener("aleya:flush-references-done", onDone);
+          resolve();
+        };
+        window.addEventListener("aleya:flush-references-done", onDone);
+        window.setTimeout(onDone, 15000);
+      });
+      window.dispatchEvent(
+        new CustomEvent("aleya:flush-references", { detail: { projectId } }),
+      );
+      await flushDone;
+      router.push(`/projects/${projectId}`);
     } catch {
       setError("Could not create the project. Check your connection and try again.");
     } finally {
@@ -71,8 +89,20 @@ function NewProjectForm() {
   return (
     <AppShell>
       <div className="mx-auto max-w-3xl animate-rise">
-        <h1 className="text-3xl">New logo project</h1>
-        <p className="mt-1 text-black/60">Tell us about the brand. Then generate multiple concepts.</p>
+        <p className="text-xs uppercase tracking-[0.18em] text-[var(--forest)]">Workflow</p>
+        <h1 className="mt-2 text-3xl">Create New Logo</h1>
+        <p className="mt-1 text-black/60">
+          Enter business details, upload references, then generate concepts in the project studio.
+        </p>
+        <ol className="mt-4 flex flex-wrap gap-2 text-xs uppercase tracking-wide text-black/55">
+          <li className="rounded-full bg-[rgba(31,77,69,0.12)] px-3 py-1 text-[var(--forest-deep)]">
+            1. Details
+          </li>
+          <li className="rounded-full bg-[rgba(31,77,69,0.12)] px-3 py-1 text-[var(--forest-deep)]">
+            2. References
+          </li>
+          <li className="rounded-full bg-black/5 px-3 py-1">3. Generate</li>
+        </ol>
         <form className="panel mt-6 grid gap-4 rounded-3xl p-6 md:grid-cols-2" onSubmit={onSubmit}>
           <label className="field md:col-span-2">
             <span>Business name</span>
@@ -138,15 +168,26 @@ function NewProjectForm() {
             <span>Icon or symbol ideas</span>
             <textarea name="iconIdeas" rows={3} placeholder="Abstract leaf mark, geometric N monogram" />
           </label>
+
+          <ReferenceUploader projectId={null} />
+
           {error ? (
             <p className="md:col-span-2 text-sm text-[var(--danger)]" role="alert">
               {error}
             </p>
           ) : null}
-          <div className="md:col-span-2">
+          {status ? (
+            <p className="md:col-span-2 text-sm text-[var(--forest-deep)]" role="status">
+              {status}
+            </p>
+          ) : null}
+          <div className="md:col-span-2 flex flex-wrap gap-3">
             <button className="btn btn-primary" disabled={loading} type="submit">
-              {loading ? "Saving…" : "Save project"}
+              {loading ? "Saving…" : "Save and continue"}
             </button>
+            <Link href="/dashboard" className="btn btn-secondary">
+              Cancel to dashboard
+            </Link>
           </div>
         </form>
       </div>

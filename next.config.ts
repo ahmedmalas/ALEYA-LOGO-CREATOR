@@ -33,7 +33,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "mupdf"],
   poweredByHeader: false,
   async headers() {
     return [

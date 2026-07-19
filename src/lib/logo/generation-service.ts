@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAssetPack, pathFor } from "@/lib/logo/assets";
+import { assertBrandKitAccess } from "@/lib/plans/enforce";
+import { commitUsage, releaseUsage, reserveUsage } from "@/lib/plans/usage-accounting";
 import { getImageProvider, ProviderError } from "@/lib/providers";
 import { assertGenerationRateLimit } from "@/lib/rate-limit";
 import type { GeneratedConcept, LogoBrief } from "@/types/logo";
@@ -92,7 +94,15 @@ export async function runGenerationJob(input: {
     return { job: existing, reused: true as const };
   }
 
-  await assertGenerationRateLimit(supabase, ownerId);
+  await assertGenerationRateLimit(supabase, ownerId, kind);
+  const eventType = kind === "refine" ? "refinement" : "generation";
+  const reservationId = await reserveUsage({
+    supabase,
+    ownerId,
+    eventType,
+    projectId,
+    metadata: { kind, idempotencyKey },
+  });
 
   const provider = getImageProvider();
   const { data: job, error: jobError } = await supabase
@@ -109,12 +119,19 @@ export async function runGenerationJob(input: {
         count: input.count ?? 4,
         conceptId: input.conceptId,
         instruction: input.instruction,
+        reservationId,
+        referenceVisualModes: (brief.references ?? []).map((r) => ({
+          id: r.id,
+          visuallyAnalysed: Boolean(r.visuallyAnalysed),
+          analysisMode: r.analysisMode ?? null,
+        })),
       },
     })
     .select("*")
     .single();
 
   if (jobError) {
+    await releaseUsage({ supabase, reservationId, ownerId });
     if (jobError.code === "23505") {
       const { data: raced } = await supabase
         .from("generation_jobs")
@@ -163,6 +180,7 @@ export async function runGenerationJob(input: {
     }
 
     const saved = [];
+    const referenceIds = (brief.references ?? []).map((r) => r.id);
     for (const concept of concepts) {
       const { data: row, error } = await supabase
         .from("logo_concepts")
@@ -181,6 +199,10 @@ export async function runGenerationJob(input: {
             ...concept.providerMetadata,
             // Do not persist large base64 blobs in DB
             imageBase64: undefined,
+            referenceIds,
+            referenceFilenames: (brief.references ?? []).map((r) => r.filename),
+            referenceTitles: (brief.references ?? []).map((r) => r.filename),
+            referenceVisuallyAnalysed: (brief.references ?? []).map((r) => Boolean(r.visuallyAnalysed)),
           },
           svg_markup: concept.svgMarkup,
           parent_concept_id: kind === "refine" ? input.conceptId : null,
@@ -199,23 +221,52 @@ export async function runGenerationJob(input: {
         .single();
       if (updateError) throw new Error(updateError.message);
       saved.push(updated);
+
+      if (referenceIds.length) {
+        await supabase.from("generation_references").insert(
+          referenceIds.map((referenceId) => ({
+            generation_job_id: job.id,
+            concept_id: row.id,
+            reference_id: referenceId,
+            owner_id: ownerId,
+          })),
+        );
+      }
     }
 
     const { data: finished } = await supabase
       .from("generation_jobs")
       .update({
         status: "succeeded",
-        result_payload: { conceptIds: saved.map((c) => c.id) },
+        result_payload: {
+          conceptIds: saved.map((c) => c.id),
+          referenceIds,
+        },
         finished_at: new Date().toISOString(),
       })
       .eq("id", job.id)
       .select("*")
       .single();
 
+    await commitUsage({
+      supabase,
+      reservationId,
+      ownerId,
+      eventType,
+      projectId,
+      metadata: {
+        jobId: job.id,
+        referenceIds,
+        conceptIds: saved.map((c) => c.id),
+        visuallyAnalysedCount: (brief.references ?? []).filter((r) => r.visuallyAnalysed).length,
+      },
+    });
+
     await supabase.from("logo_projects").update({ status: "ready" }).eq("id", projectId);
 
     return { job: finished, concepts: saved, reused: false as const };
   } catch (error) {
+    await releaseUsage({ supabase, reservationId, ownerId });
     const message =
       error instanceof ProviderError
         ? error.message
@@ -242,6 +293,7 @@ export async function selectConceptAndCreateBrandKit(input: {
   conceptId: string;
 }) {
   const { supabase, ownerId, projectId, conceptId } = input;
+  await assertBrandKitAccess(supabase, ownerId);
 
   const { data: project } = await supabase
     .from("logo_projects")

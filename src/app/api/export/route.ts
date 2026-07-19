@@ -1,3 +1,9 @@
+import {
+  assertExportAllowance,
+  assertExportFormatsAllowed,
+  PlanLimitError,
+} from "@/lib/plans/enforce";
+import { commitUsage, releaseUsage, reserveUsage } from "@/lib/plans/usage-accounting";
 import { handleRouteError, jsonError, readJson } from "@/lib/security/api";
 import { createClient } from "@/lib/supabase/server";
 import JSZip from "jszip";
@@ -16,16 +22,32 @@ async function downloadFile(supabase: Awaited<ReturnType<typeof createClient>>, 
   return Buffer.from(await data.arrayBuffer());
 }
 
+const FORMAT_MAP: Array<{ file: string; format: string; pathKey: string }> = [
+  { file: "logo.svg", format: "SVG", pathKey: "svg" },
+  { file: "logo-transparent.png", format: "Transparent PNG", pathKey: "transparent_png_path" },
+  { file: "logo-hires.png", format: "Hi-res PNG", pathKey: "png_path" },
+  { file: "logo-icon.png", format: "Icon", pathKey: "icon_path" },
+  { file: "logo-horizontal.png", format: "Horizontal", pathKey: "horizontal_path" },
+  { file: "logo-stacked.png", format: "Stacked", pathKey: "stacked_path" },
+  { file: "logo-mono.png", format: "Monochrome", pathKey: "monochrome_path" },
+];
+
 export async function POST(request: Request) {
+  let reservationId: string | null = null;
+  let ownerId: string | null = null;
+  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
+
   try {
-    const supabase = await createClient();
+    supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return jsonError("Unauthorized", 401);
+    ownerId = user.id;
 
     const body = await readJson(request, schema);
     let conceptId = body.conceptId;
+    let projectId: string | null = null;
 
     if (body.brandKitId) {
       const { data: kit } = await supabase
@@ -36,9 +58,19 @@ export async function POST(request: Request) {
         .single();
       if (!kit) return jsonError("Brand kit not found", 404);
       conceptId = kit.concept_id;
+      projectId = kit.project_id;
     }
 
     if (!conceptId) return jsonError("conceptId or brandKitId required", 400);
+
+    const plan = await assertExportAllowance(supabase, user.id);
+    reservationId = await reserveUsage({
+      supabase,
+      ownerId: user.id,
+      eventType: "export",
+      projectId,
+      metadata: { conceptId, brandKitId: body.brandKitId ?? null },
+    });
 
     const { data: concept } = await supabase
       .from("logo_concepts")
@@ -46,37 +78,49 @@ export async function POST(request: Request) {
       .eq("id", conceptId)
       .eq("owner_id", user.id)
       .single();
-    if (!concept) return jsonError("Concept not found", 404);
+    if (!concept) {
+      await releaseUsage({ supabase, reservationId, ownerId: user.id });
+      return jsonError("Concept not found", 404);
+    }
+    projectId = projectId ?? concept.project_id;
 
     const zip = new JSZip();
-    const files: Array<[string, string | null]> = [
-      ["logo-transparent.png", concept.transparent_png_path],
-      ["logo-hires.png", concept.png_path],
-      ["logo-icon.png", concept.icon_path],
-      ["logo-horizontal.png", concept.horizontal_path],
-      ["logo-stacked.png", concept.stacked_path],
-      ["logo-mono.png", concept.monochrome_path],
-      ["preview-light.png", concept.light_preview_path],
-      ["preview-dark.png", concept.dark_preview_path],
-    ];
+    const includedFormats: string[] = [];
 
     if (concept.svg_markup) {
+      assertExportFormatsAllowed(plan, ["SVG"]);
       zip.file("logo.svg", concept.svg_markup);
+      includedFormats.push("SVG");
     }
 
-    let assetCount = concept.svg_markup ? 1 : 0;
-    for (const [name, path] of files) {
+    for (const item of FORMAT_MAP) {
+      if (item.pathKey === "svg") continue;
+      const path = concept[item.pathKey] as string | null;
       if (!path) continue;
+      assertExportFormatsAllowed(plan, [item.format]);
       const buf = await downloadFile(supabase, path);
       if (buf) {
-        zip.file(name, buf);
-        assetCount += 1;
+        zip.file(item.file, buf);
+        includedFormats.push(item.format);
       }
     }
 
-    if (assetCount === 0) {
+    // Optional previews are extras; not counted as plan formats.
+    for (const [name, path] of [
+      ["preview-light.png", concept.light_preview_path],
+      ["preview-dark.png", concept.dark_preview_path],
+    ] as const) {
+      const buf = await downloadFile(supabase, path);
+      if (buf) zip.file(name, buf);
+    }
+
+    if (includedFormats.length === 0) {
+      await releaseUsage({ supabase, reservationId, ownerId: user.id });
       return jsonError("No exportable assets found for this concept", 404);
     }
+
+    includedFormats.push("ZIP Brand Kit");
+    assertExportFormatsAllowed(plan, ["ZIP Brand Kit"]);
 
     zip.file(
       "metadata.json",
@@ -90,6 +134,7 @@ export async function POST(request: Request) {
           typography: concept.typography,
           provider: concept.provider,
           createdAt: concept.created_at,
+          exportedFormats: includedFormats,
         },
         null,
         2,
@@ -97,14 +142,36 @@ export async function POST(request: Request) {
     );
 
     const content = await zip.generateAsync({ type: "uint8array" });
+
+    await commitUsage({
+      supabase,
+      reservationId,
+      ownerId: user.id,
+      eventType: "export",
+      projectId,
+      metadata: {
+        conceptId,
+        brandKitId: body.brandKitId ?? null,
+        formats: includedFormats,
+        pack: "zip",
+      },
+    });
+
     return new NextResponse(Buffer.from(content), {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="aleya-logo-${conceptId.slice(0, 8)}.zip"`,
         "Cache-Control": "no-store",
+        "X-ALEYA-Export-Formats": includedFormats.join(","),
       },
     });
   } catch (error) {
+    if (supabase && reservationId && ownerId) {
+      await releaseUsage({ supabase, reservationId, ownerId });
+    }
+    if (error instanceof PlanLimitError) {
+      return jsonError(error.message, error.status);
+    }
     return handleRouteError(error, "Export failed");
   }
 }

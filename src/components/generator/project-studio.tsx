@@ -1,6 +1,8 @@
 "use client";
 
+import { ReferenceUploader } from "@/components/project/reference-uploader";
 import { ConceptSkeletonGrid } from "@/components/ui/loading-block";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type Concept = {
@@ -14,6 +16,10 @@ type Concept = {
   is_selected: boolean;
   light_preview_path?: string | null;
   dark_preview_path?: string | null;
+  provider_metadata?: {
+    referenceIds?: string[];
+    referenceFilenames?: string[];
+  } | null;
 };
 
 type Project = {
@@ -41,6 +47,10 @@ export function ProjectStudio({
   const [error, setError] = useState<string | null>(null);
   const [refineText, setRefineText] = useState("");
   const [focusId, setFocusId] = useState<string | null>(initialConcepts[0]?.id ?? null);
+  const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
+  const [lastReferencesUsed, setLastReferencesUsed] = useState<
+    { id: string; filename: string }[]
+  >([]);
 
   const focus = useMemo(
     () => concepts.find((c) => c.id === focusId) ?? concepts[0] ?? null,
@@ -74,6 +84,7 @@ export function ProjectStudio({
           count: 4,
           kind,
           idempotencyKey: `${kind}:${project.id}:${crypto.randomUUID()}`,
+          referenceIds: activeReferenceIds,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -85,10 +96,19 @@ export function ProjectStudio({
         );
         return;
       }
+      const used = (json.referencesUsed ?? []).map(
+        (r: { id: string; filename: string }) => ({
+          id: r.id,
+          filename: r.filename,
+        }),
+      );
+      setLastReferencesUsed(used);
       setMessage(
         json.reused
           ? "Reused an in-flight or completed job (no duplicate charge)."
-          : "Concepts generated.",
+          : used.length
+            ? `Concepts generated using ${used.length} reference file(s).`
+            : "Concepts generated. Add references above if you want visual guidance next time.",
       );
       await reload();
     } catch {
@@ -111,6 +131,7 @@ export function ProjectStudio({
           conceptId: focus.id,
           instruction: refineText.trim(),
           idempotencyKey: `refine:${focus.id}:${crypto.randomUUID()}`,
+          referenceIds: activeReferenceIds,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -122,7 +143,18 @@ export function ProjectStudio({
         );
         return;
       }
-      setMessage("Refined concept created.");
+      const used = (json.referencesUsed ?? []).map(
+        (r: { id: string; filename: string }) => ({
+          id: r.id,
+          filename: r.filename,
+        }),
+      );
+      setLastReferencesUsed(used);
+      setMessage(
+        used.length
+          ? `Refined concept created using ${used.length} reference file(s).`
+          : "Refined concept created.",
+      );
       setRefineText("");
       await reload();
     } catch {
@@ -243,6 +275,29 @@ export function ProjectStudio({
         </p>
       ) : null}
 
+      <div className="panel rounded-3xl p-5 md:p-6">
+        <ReferenceUploader
+          projectId={project.id}
+          onActiveChange={setActiveReferenceIds}
+        />
+        {lastReferencesUsed.length ? (
+          <p className="mt-4 text-sm text-black/60" data-testid="references-used-summary">
+            Last generation used:{" "}
+            {lastReferencesUsed.map((r) => r.filename).join(", ")}
+          </p>
+        ) : null}
+      </div>
+
+      <ol className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-black/55">
+        <li className="rounded-full bg-black/5 px-3 py-1">1. Brief</li>
+        <li className="rounded-full bg-[rgba(31,77,69,0.12)] px-3 py-1 text-[var(--forest-deep)]">
+          2. References
+        </li>
+        <li className="rounded-full bg-black/5 px-3 py-1">3. Generate</li>
+        <li className="rounded-full bg-black/5 px-3 py-1">4. Compare / refine</li>
+        <li className="rounded-full bg-black/5 px-3 py-1">5. Brand Kit</li>
+      </ol>
+
       <div className="flex flex-wrap gap-2" role="group" aria-label="Preview mode">
         <button
           type="button"
@@ -305,6 +360,11 @@ export function ProjectStudio({
                     ) : null}
                   </div>
                   <p className="text-sm text-black/55">{concept.layout} · {concept.icon_concept}</p>
+                  {concept.provider_metadata?.referenceFilenames?.length ? (
+                    <p className="text-xs text-black/50">
+                      References used: {concept.provider_metadata.referenceFilenames.join(", ")}
+                    </p>
+                  ) : null}
                 </div>
               </button>
               <div className="flex flex-wrap gap-2 border-t border-black/5 px-4 py-3">
@@ -341,18 +401,23 @@ export function ProjectStudio({
         <div className="panel rounded-3xl p-8 md:p-10" data-testid="empty-generate-state">
           <h2 className="text-xl">Ready to generate</h2>
           <p className="mt-2 max-w-xl text-black/60">
-            Your brief is saved. Generate four distinct directions, then compare, refine, and select
-            a final mark to create a Brand Kit.
+            Your brief is saved. Upload any references above, then generate four distinct directions.
+            Compare, refine, and select a final mark to create a Brand Kit — without leaving the app.
           </p>
-          <button
-            type="button"
-            className="btn btn-primary mt-6"
-            disabled={Boolean(busy)}
-            onClick={() => generate("generate")}
-            data-testid="empty-generate-button"
-          >
-            Generate concepts
-          </button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={Boolean(busy)}
+              onClick={() => generate("generate")}
+              data-testid="empty-generate-button"
+            >
+              Generate concepts
+            </button>
+            <Link href="/dashboard" className="btn btn-secondary">
+              Back to dashboard
+            </Link>
+          </div>
         </div>
       ) : null}
 

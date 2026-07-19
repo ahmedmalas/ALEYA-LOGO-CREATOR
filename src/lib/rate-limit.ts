@@ -1,27 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { assertGenerationAllowance, PlanLimitError } from "@/lib/plans/enforce";
 
-const DEFAULT_LIMIT = Number(process.env.GENERATION_RATE_LIMIT_PER_HOUR ?? 20);
-
+/** @deprecated Prefer assertGenerationAllowance — kept for import compatibility. */
 export async function assertGenerationRateLimit(
   supabase: SupabaseClient,
   ownerId: string,
+  kind: "generate" | "regenerate" | "refine" = "generate",
 ): Promise<void> {
-  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { count, error } = await supabase
-    .from("generation_jobs")
-    .select("id", { count: "exact", head: true })
-    .eq("owner_id", ownerId)
-    .gte("created_at", since);
-
-  if (error) {
-    throw new Error(`Rate limit check failed: ${error.message}`);
-  }
-
-  if ((count ?? 0) >= DEFAULT_LIMIT) {
-    const err = new Error(
-      `Generation rate limit exceeded (${DEFAULT_LIMIT}/hour). Please wait before generating more logos.`,
-    );
-    (err as Error & { status: number }).status = 429;
-    throw err;
+  try {
+    await assertGenerationAllowance(supabase, ownerId, kind);
+  } catch (error) {
+    if (error instanceof PlanLimitError) {
+      const err = new Error(error.message) as Error & { status: number; code: string };
+      err.status = error.status;
+      err.code = error.code;
+      throw err;
+    }
+    throw error;
   }
 }

@@ -1,10 +1,27 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectStudio } from "./project-studio";
+
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/references")) {
+        return new Response(JSON.stringify({ references: [], limits: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }),
+  );
+});
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 const project = {

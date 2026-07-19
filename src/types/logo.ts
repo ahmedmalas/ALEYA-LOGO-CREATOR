@@ -33,6 +33,26 @@ export type Personality = (typeof PERSONALITIES)[number];
 export type LayoutDirection = (typeof LAYOUTS)[number];
 export type TypographyDirection = (typeof TYPOGRAPHY_DIRECTIONS)[number];
 
+export type LogoReferenceBrief = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  note: string | null;
+  kind: string;
+  extractedText: string | null;
+  supportedInProvider: boolean;
+  unsupportedReason?: string;
+  analysisStatus?: string;
+  analysisMode?: string | null;
+  analysis?: Record<string, unknown> | null;
+  analysisConfirmed?: Record<string, unknown> | null;
+  analysisProvider?: string | null;
+  analysisModel?: string | null;
+  analysisError?: string | null;
+  pdfPagesProcessed?: number[];
+  visuallyAnalysed?: boolean;
+};
+
 export type LogoBrief = {
   businessName: string;
   tagline?: string;
@@ -44,6 +64,8 @@ export type LogoBrief = {
   iconIdeas?: string;
   typographyDirection: TypographyDirection;
   layoutDirection: LayoutDirection;
+  /** Active reference materials selected for this generation. */
+  references?: LogoReferenceBrief[];
 };
 
 export type ConceptPalette = {
