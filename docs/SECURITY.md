@@ -28,6 +28,7 @@
 | Generation rate limit TOCTOU | Check-then-insert under concurrency | Acceptable for Free tier; revisit with Redis/KV |
 | SVG still rendered via `innerHTML` | Mitigated by hex sanitization + escaping; owner-scoped data | Prefer blob/`img` rendering later |
 | Dependency audit | `npm audit` reports moderate PostCSS via Next.js (no safe fix without breaking Next) | Track upstream Next.js patch; no high/critical production advisories |
+| Auth email via built-in SMTP | Project-wide ~2 emails/hour; production users hit `over_email_send_rate_limit` | **Ahmed:** configure custom SMTP + templates + Site URL — see [AUTH_EMAIL_SMTP.md](./AUTH_EMAIL_SMTP.md). App cooldown/UX shipped separately. |
 
 ## Controls already in place (unchanged)
 

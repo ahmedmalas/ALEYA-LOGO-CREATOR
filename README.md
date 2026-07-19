@@ -93,12 +93,14 @@ Full template: [`.env.example`](.env.example).
 | “Return URL is not allowed” | Add Aleya origin to `ALEYA_RETURN_URL_ALLOWLIST` or match `ALEYA_INVOICING_RECEIVE_URL` origin |
 | “Aleya handoff must be validated…” | Open Logo Creator from Aleya (validate sets cookie) before creating a linked project |
 | Generation rate limit | Wait for the hourly window or raise `GENERATION_RATE_LIMIT_PER_HOUR` |
-| Password reset email missing | Confirm Supabase Auth email templates and redirect allowlist |
+| Password reset email missing | Confirm custom SMTP is enabled (built-in provider is ~2/hour). See [docs/AUTH_EMAIL_SMTP.md](docs/AUTH_EMAIL_SMTP.md) |
+| “Email rate limit exceeded” | Built-in SMTP cap or client cooldown — wait for the countdown; configure custom SMTP for production |
 | Export empty / failed | Concept must have SVG or storage assets; re-generate if assets missing |
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Auth email / SMTP production setup](docs/AUTH_EMAIL_SMTP.md)
 - [Changelog](CHANGELOG.md)
 - [Security audit summary](docs/SECURITY.md)
 - [Release notes / RC checklist](docs/RELEASE_NOTES_v1.0.0.md)
