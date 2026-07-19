@@ -15,6 +15,29 @@ export type AnalysisFields = {
   elementsToAvoid: string[];
   summary: string;
   pdfPagesProcessed: number[];
+  logoMark?: string;
+  symbolGeometry?: string;
+  composition?: string;
+  layoutStructure?: string;
+  proportions?: string;
+  alignment?: string;
+  spacing?: string;
+  typographyCategory?: string;
+  letterCasing?: string;
+  letterSpacing?: string;
+  strokeWeight?: string;
+  primaryColours?: string[];
+  secondaryColours?: string[];
+  gradients?: string;
+  outlines?: string;
+  shadows?: string;
+  backgrounds?: string;
+  borders?: string;
+  visualEraStyle?: string;
+  brandMood?: string;
+  distinctiveElements?: string[];
+  weakAreasToImprove?: string[];
+  similarityConstraints?: string;
 };
 
 type Props = {
@@ -44,6 +67,8 @@ function toList(value: string): string[] {
     .filter(Boolean);
 }
 
+type Draft = Record<string, string>;
+
 export function ReferenceAnalysisPanel({
   projectId,
   referenceId,
@@ -59,16 +84,36 @@ export function ReferenceAnalysisPanel({
   onUpdated,
 }: Props) {
   const source = analysisConfirmed ?? analysis ?? {};
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<Draft>({
     summary: source.summary ?? "",
     existingLogoText: source.existingLogoText ?? "",
-    symbolsAndShapes: asList(source.symbolsAndShapes),
-    layout: source.layout ?? "",
-    colourPalette: asList(source.colourPalette),
+    logoMark: source.logoMark ?? "",
+    symbolGeometry: source.symbolGeometry ?? asList(source.symbolsAndShapes),
+    composition: source.composition ?? source.layout ?? "",
+    layoutStructure: source.layoutStructure ?? "",
+    proportions: source.proportions ?? "",
+    alignment: source.alignment ?? "",
+    spacing: source.spacing ?? "",
+    typographyCategory: source.typographyCategory ?? "",
     typographyCharacteristics: source.typographyCharacteristics ?? "",
-    visualStyle: source.visualStyle ?? "",
+    letterCasing: source.letterCasing ?? "",
+    letterSpacing: source.letterSpacing ?? "",
+    strokeWeight: source.strokeWeight ?? "",
+    primaryColours: asList(source.primaryColours?.length ? source.primaryColours : source.colourPalette),
+    secondaryColours: asList(source.secondaryColours),
+    gradients: source.gradients ?? "",
+    outlines: source.outlines ?? "",
+    shadows: source.shadows ?? "",
+    backgrounds: source.backgrounds ?? "",
+    borders: source.borders ?? "",
+    visualEraStyle: source.visualEraStyle ?? source.visualStyle ?? "",
+    brandMood: source.brandMood ?? "",
+    distinctiveElements: asList(
+      source.distinctiveElements?.length ? source.distinctiveElements : source.elementsToPreserve,
+    ),
+    weakAreasToImprove: asList(source.weakAreasToImprove),
+    similarityConstraints: source.similarityConstraints ?? "",
     packagingContext: source.packagingContext ?? "",
-    elementsToPreserve: asList(source.elementsToPreserve),
     elementsToAvoid: asList(source.elementsToAvoid),
   });
   const [busy, setBusy] = useState(false);
@@ -84,6 +129,9 @@ export function ReferenceAnalysisPanel({
     setBusy(true);
     setError(null);
     setMessage(null);
+    const distinctive = toList(draft.distinctiveElements);
+    const primary = toList(draft.primaryColours);
+    const secondary = toList(draft.secondaryColours);
     const res = await fetch(`/api/projects/${projectId}/references`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -93,13 +141,36 @@ export function ReferenceAnalysisPanel({
         analysisConfirmed: {
           summary: draft.summary,
           existingLogoText: draft.existingLogoText,
-          symbolsAndShapes: toList(draft.symbolsAndShapes),
-          layout: draft.layout,
-          colourPalette: toList(draft.colourPalette),
+          logoMark: draft.logoMark,
+          symbolGeometry: draft.symbolGeometry,
+          symbolsAndShapes: toList(draft.symbolGeometry),
+          composition: draft.composition,
+          layout: draft.composition,
+          layoutStructure: draft.layoutStructure || "unknown",
+          proportions: draft.proportions,
+          alignment: draft.alignment,
+          spacing: draft.spacing,
+          typographyCategory: draft.typographyCategory,
           typographyCharacteristics: draft.typographyCharacteristics,
-          visualStyle: draft.visualStyle,
+          letterCasing: draft.letterCasing,
+          letterSpacing: draft.letterSpacing,
+          strokeWeight: draft.strokeWeight,
+          primaryColours: primary,
+          secondaryColours: secondary,
+          colourPalette: [...primary, ...secondary],
+          gradients: draft.gradients,
+          outlines: draft.outlines,
+          shadows: draft.shadows,
+          backgrounds: draft.backgrounds,
+          borders: draft.borders,
+          visualEraStyle: draft.visualEraStyle,
+          visualStyle: draft.visualEraStyle,
+          brandMood: draft.brandMood,
+          distinctiveElements: distinctive,
+          elementsToPreserve: distinctive,
+          weakAreasToImprove: toList(draft.weakAreasToImprove),
+          similarityConstraints: draft.similarityConstraints,
           packagingContext: draft.packagingContext,
-          elementsToPreserve: toList(draft.elementsToPreserve),
           elementsToAvoid: toList(draft.elementsToAvoid),
           pdfPagesProcessed: pages,
         },
@@ -111,7 +182,7 @@ export function ReferenceAnalysisPanel({
       setError(json.error ?? "Could not save analysis corrections");
       return;
     }
-    setMessage("Saved your corrections. They will be used in the next generation.");
+    setMessage("Saved your corrections. They will guide Mirror / Refine / Advance generation.");
     onUpdated?.();
   }
 
@@ -134,6 +205,37 @@ export function ReferenceAnalysisPanel({
     onUpdated?.();
   }
 
+  const fields: Array<[string, string, boolean?]> = [
+    ["summary", "Summary", true],
+    ["existingLogoText", "Exact logo text"],
+    ["logoMark", "Logo mark / symbol"],
+    ["symbolGeometry", "Symbol geometry"],
+    ["composition", "Composition"],
+    ["layoutStructure", "Layout (horizontal / stacked / emblem / wordmark / monogram)"],
+    ["proportions", "Proportions"],
+    ["alignment", "Alignment"],
+    ["spacing", "Spacing"],
+    ["typographyCategory", "Typography category"],
+    ["typographyCharacteristics", "Typography characteristics"],
+    ["letterCasing", "Letter casing"],
+    ["letterSpacing", "Letter spacing"],
+    ["strokeWeight", "Stroke weight"],
+    ["primaryColours", "Primary colours"],
+    ["secondaryColours", "Secondary colours"],
+    ["gradients", "Gradients"],
+    ["outlines", "Outlines"],
+    ["shadows", "Shadows"],
+    ["backgrounds", "Backgrounds"],
+    ["borders", "Borders"],
+    ["visualEraStyle", "Visual era / style"],
+    ["brandMood", "Brand mood"],
+    ["distinctiveElements", "Distinctive elements to retain"],
+    ["weakAreasToImprove", "Weak areas to improve"],
+    ["similarityConstraints", "Similarity constraints", true],
+    ["packagingContext", "Packaging / context"],
+    ["elementsToAvoid", "Elements to avoid"],
+  ];
+
   return (
     <div className="space-y-2 rounded-xl bg-[rgba(31,77,69,0.05)] p-3" data-testid="reference-analysis">
       <p className="text-xs font-medium uppercase tracking-wide text-[var(--forest)]">
@@ -152,8 +254,8 @@ export function ReferenceAnalysisPanel({
 
       {visuallyAnalysed ? (
         <p className="text-xs text-black/55">
-          Analysed with {analysisProvider}/{analysisModel}. You can correct anything below before
-          generating.
+          Analysed with {analysisProvider}/{analysisModel}. Confirm or edit before Mirror / Refine /
+          Advance.
         </p>
       ) : null}
 
@@ -163,24 +265,11 @@ export function ReferenceAnalysisPanel({
 
       {visuallyAnalysed || analysisConfirmed ? (
         <div className="grid gap-2 sm:grid-cols-2">
-          {(
-            [
-              ["summary", "Summary"],
-              ["existingLogoText", "Existing logo text"],
-              ["symbolsAndShapes", "Symbols / shapes"],
-              ["layout", "Layout"],
-              ["colourPalette", "Colour palette"],
-              ["typographyCharacteristics", "Typography"],
-              ["visualStyle", "Visual style"],
-              ["packagingContext", "Packaging context"],
-              ["elementsToPreserve", "Preserve"],
-              ["elementsToAvoid", "Avoid"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className={`field ${key === "summary" ? "sm:col-span-2" : ""}`}>
+          {fields.map(([key, label, wide]) => (
+            <label key={key} className={`field ${wide ? "sm:col-span-2" : ""}`}>
               <span className="text-xs">{label}</span>
               <input
-                value={draft[key]}
+                value={draft[key] ?? ""}
                 onChange={(e) => setDraft((current) => ({ ...current, [key]: e.target.value }))}
               />
             </label>

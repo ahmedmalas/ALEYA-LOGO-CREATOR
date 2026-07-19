@@ -146,8 +146,42 @@ export async function analyseProjectReference(input: {
       pdfPagesProcessed: pdfPages,
     });
 
+    // High-res render → segment colours → trace editable SVG paths for Mirror conditioning.
+    let reconstructionFields: Partial<ReferenceAnalysis> = {};
+    try {
+      const { reconstructReferenceLogo } = await import("@/lib/references/reconstruct");
+      const reconstruction = await reconstructReferenceLogo({
+        buffer,
+        mimeType: mime,
+        fidelity: "faithful",
+      });
+      reconstructionFields = {
+        reconstructedSvg: reconstruction.reconstructedSvg,
+        reconstructionSource: reconstruction.source,
+        reconstructionPathCount: reconstruction.pathCount,
+        referencePngBase64: reconstruction.referencePngBase64,
+        colourRegions: reconstruction.colourRegions,
+        segments: reconstruction.segments,
+        primaryColours:
+          result.analysis.primaryColours?.length
+            ? result.analysis.primaryColours
+            : reconstruction.palette.slice(0, 2),
+        secondaryColours:
+          result.analysis.secondaryColours?.length
+            ? result.analysis.secondaryColours
+            : reconstruction.palette.slice(2, 4),
+        colourPalette:
+          result.analysis.colourPalette?.length
+            ? result.analysis.colourPalette
+            : reconstruction.palette,
+      };
+    } catch (reconError) {
+      console.error("[analyse] reconstruction failed", reconError);
+    }
+
     const analysis: ReferenceAnalysis = {
       ...result.analysis,
+      ...reconstructionFields,
       pdfPagesProcessed: pdfPages.length ? pdfPages : result.analysis.pdfPagesProcessed,
     };
 

@@ -1,3 +1,5 @@
+import { generationControlsSchema } from "@/lib/logo/evolution";
+import { MirrorSimilarityError } from "@/lib/logo/similarity";
 import { loadActiveReferences, withReferences } from "@/lib/references/brief";
 import { runGenerationJob } from "@/lib/logo/generation-service";
 import { ProviderError } from "@/lib/providers";
@@ -12,6 +14,7 @@ const schema = z.object({
   idempotencyKey: z.string().min(8).max(120),
   kind: z.enum(["generate", "regenerate"]).default("generate"),
   referenceIds: z.array(z.string().uuid()).optional(),
+  controls: generationControlsSchema.partial().optional(),
 });
 
 export async function POST(request: Request) {
@@ -38,6 +41,7 @@ export async function POST(request: Request) {
       body.referenceIds,
     );
 
+    const controls = generationControlsSchema.parse(body.controls ?? {});
     const brief: LogoBrief = withReferences(
       {
         businessName: project.business_name,
@@ -50,6 +54,10 @@ export async function POST(request: Request) {
         iconIdeas: project.icon_ideas ?? undefined,
         typographyDirection: project.typography_direction,
         layoutDirection: project.layout_direction,
+        generationControls: {
+          ...controls,
+          exactLogoText: controls.exactLogoText || project.business_name,
+        },
       },
       references,
     );
@@ -71,6 +79,22 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error && typeof error === "object" && "issues" in error) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+    if (error instanceof MirrorSimilarityError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: "mirror_similarity_failed",
+          similarity: error.report,
+        },
+        { status: 422 },
+      );
+    }
+    if (error instanceof Error && /reconstruction is required/i.test(error.message)) {
+      return NextResponse.json(
+        { error: error.message, code: "reconstruction_required" },
+        { status: 422 },
+      );
     }
     const errStatus = (error as { status?: number }).status;
     const status =

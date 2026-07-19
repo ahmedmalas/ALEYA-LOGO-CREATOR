@@ -49,10 +49,11 @@ describe("ProjectStudio generate actions", () => {
   it("shows one generate button for a new empty project", () => {
     render(<ProjectStudio project={project} initialConcepts={[]} />);
 
-    const generateButtons = screen.getAllByRole("button", { name: "Generate concepts" });
+    const generateButtons = screen.getAllByRole("button", { name: "Generate evolution set" });
     expect(generateButtons).toHaveLength(1);
     expect(screen.getByTestId("empty-generate-state")).toBeTruthy();
     expect(screen.getByTestId("empty-generate-button")).toBeTruthy();
+    expect(screen.getByTestId("generation-controls")).toBeTruthy();
     expect(screen.queryByTestId("header-generate-actions")).toBeNull();
     expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
   });
@@ -61,9 +62,9 @@ describe("ProjectStudio generate actions", () => {
     render(<ProjectStudio project={project} initialConcepts={[sampleConcept]} />);
 
     expect(screen.getByTestId("header-generate-actions")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Generate concepts" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Generate evolution set" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Regenerate" })).toBeTruthy();
     expect(screen.queryByTestId("empty-generate-state")).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Generate concepts" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Generate evolution set" })).toHaveLength(1);
   });
 });

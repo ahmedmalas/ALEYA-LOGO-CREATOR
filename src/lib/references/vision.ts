@@ -51,7 +51,7 @@ function apiKey() {
   return process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || "";
 }
 
-const SYSTEM_PROMPT = `You analyse brand reference images for a logo designer.
+const SYSTEM_PROMPT = `You analyse brand reference logo images for a professional logo evolution tool.
 Return ONLY valid JSON matching this shape:
 {
   "existingLogoText": string,
@@ -64,9 +64,42 @@ Return ONLY valid JSON matching this shape:
   "elementsToPreserve": string[],
   "elementsToAvoid": string[],
   "summary": string,
-  "pdfPagesProcessed": number[]
+  "pdfPagesProcessed": number[],
+  "logoMark": string,
+  "symbolGeometry": string,
+  "composition": string,
+  "layoutStructure": "horizontal" | "stacked" | "emblem" | "wordmark" | "monogram" | "unknown",
+  "proportions": string,
+  "alignment": string,
+  "spacing": string,
+  "typographyCategory": string,
+  "letterCasing": string,
+  "letterSpacing": string,
+  "strokeWeight": string,
+  "primaryColours": string[],
+  "secondaryColours": string[],
+  "gradients": string,
+  "outlines": string,
+  "shadows": string,
+  "backgrounds": string,
+  "borders": string,
+  "visualEraStyle": string,
+  "brandMood": string,
+  "distinctiveElements": string[],
+  "weakAreasToImprove": string[],
+  "similarityConstraints": string,
+  "fontGuess": string,
+  "fontCategoryMatch": string
 }
-Do not invent trademarks to copy. Describe what is visible. colourPalette should use hex when possible.`;
+Rules:
+- existingLogoText must be the exact visible logo wording (correct spelling/casing).
+- Describe symbol geometry precisely (circle, shield, letterform, etc.).
+- colourPalette/primaryColours/secondaryColours should use hex when possible.
+- distinctiveElements = traits that must be retained for recognisability.
+- weakAreasToImprove = production flaws (kerning, alignment, inconsistent strokes).
+- similarityConstraints = what a faithful recreation must keep.
+- fontGuess = closest known font family if identifiable; fontCategoryMatch = serif/sans/display/script/mono.
+- Do not invent trademarks that are not visible.`;
 
 function sanitizeProviderError(detail: string) {
   return detail

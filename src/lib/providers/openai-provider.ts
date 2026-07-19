@@ -1,4 +1,4 @@
-import { composeSvgConcepts } from "@/lib/logo/svg-composer";
+import { composeRefinedConcept, composeSvgConcepts } from "@/lib/logo/svg-composer";
 import type { GeneratedConcept } from "@/types/logo";
 import { ProviderError, type GenerateRequest, type ImageProvider, type RefineRequest } from "./types";
 
@@ -44,7 +44,11 @@ export class OpenAIImageProvider implements ImageProvider {
   async generateConcepts(request: GenerateRequest): Promise<GeneratedConcept[]> {
     const count = Math.min(Math.max(request.count, 1), 4);
     // Vector scaffolds remain the editable source; AI produces concept art references when available.
-    const scaffolds = composeSvgConcepts(request.brief, count, request.seed ?? crypto.randomUUID());
+    const scaffolds = await composeSvgConcepts(
+      request.brief,
+      count,
+      request.seed ?? crypto.randomUUID(),
+    );
     const results: GeneratedConcept[] = [];
 
     for (const scaffold of scaffolds) {
@@ -72,25 +76,17 @@ export class OpenAIImageProvider implements ImageProvider {
   }
 
   async refineConcept(request: RefineRequest): Promise<GeneratedConcept> {
-    const [scaffold] = composeSvgConcepts(
-      {
-        ...request.brief,
-        iconIdeas: `${request.concept.iconConcept}; ${request.instruction}`,
-      },
-      1,
-      `refine:${request.instruction}`,
+    const scaffold = await composeRefinedConcept(
+      request.brief,
+      request.concept,
+      request.instruction,
     );
-    if (!scaffold) {
-      throw new ProviderError("invalid_request", "Unable to refine concept");
-    }
-    const prompt = `${request.concept.prompt}. Refinement: ${request.instruction}`;
-    const image = await this.generateImage(prompt);
+    const image = await this.generateImage(scaffold.prompt);
     return {
       ...scaffold,
-      title: `${request.concept.title} (refined)`,
-      prompt,
       provider: this.name,
       providerMetadata: {
+        ...scaffold.providerMetadata,
         model: this.model,
         imageBase64: image.b64,
         revisedPrompt: image.revisedPrompt,
