@@ -181,6 +181,8 @@ export async function runGenerationJob(input: {
             ...concept.providerMetadata,
             // Do not persist large base64 blobs in DB
             imageBase64: undefined,
+            referenceIds: (brief.references ?? []).map((r) => r.id),
+            referenceFilenames: (brief.references ?? []).map((r) => r.filename),
           },
           svg_markup: concept.svgMarkup,
           parent_concept_id: kind === "refine" ? input.conceptId : null,

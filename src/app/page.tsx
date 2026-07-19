@@ -1,6 +1,13 @@
+import { MarketingCtaGroup } from "@/components/marketing/marketing-ctas";
 import { SampleLogo } from "@/components/marketing/sample-logo";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { SiteHeader } from "@/components/marketing/site-header";
+import {
+  finalBandCtas,
+  planCtaForAuth,
+  primaryMarketingCtas,
+} from "@/lib/auth/marketing-ctas";
+import { getAuthState } from "@/lib/auth/session";
 import { GALLERY_SAMPLES } from "@/lib/gallery-samples";
 import { PLANS } from "@/lib/pricing";
 import type { Metadata } from "next";
@@ -15,9 +22,13 @@ export const metadata: Metadata = {
 
 const showcase = GALLERY_SAMPLES.slice(0, 4);
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { signedIn } = await getAuthState();
+  const heroCtas = primaryMarketingCtas(signedIn);
+  const closingCtas = finalBandCtas(signedIn);
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-auth={signedIn ? "signed-in" : "signed-out"}>
       <div className="relative min-h-[100svh] overflow-hidden">
         <div
           className="absolute inset-0 -z-10"
@@ -48,17 +59,12 @@ export default function HomePage() {
           >
             Generate distinct brand marks, refine concepts, and export a reusable Brand Kit.
           </p>
-          <div
-            className="mt-8 flex flex-wrap gap-3 animate-rise"
-            style={{ animationDelay: "200ms" }}
-          >
-            <Link href="/signup" className="btn btn-on-dark-primary">
-              Get Started
-            </Link>
-            <Link href="/login" className="btn btn-on-dark">
-              Sign In
-            </Link>
-          </div>
+          <MarketingCtaGroup
+            ctas={heroCtas}
+            tone="on-dark"
+            className="mt-8 animate-rise"
+            data-testid="hero-ctas"
+          />
         </section>
       </div>
 
@@ -181,7 +187,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 py-20 md:px-8">
+        <section className="mx-auto max-w-6xl px-4 py-20 md:px-8" data-testid="homepage-pricing">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-3xl md:text-4xl">Simple pricing</h2>
@@ -194,53 +200,59 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="mt-10 grid gap-6 md:grid-cols-2">
-            {PLANS.map((plan) => (
-              <article
-                key={plan.id}
-                className={`panel rounded-3xl p-6 ${plan.highlighted ? "ring-2 ring-[var(--forest)]" : ""}`}
-              >
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-2xl">{plan.name}</h3>
-                  <p className="text-2xl font-semibold text-[var(--forest-deep)]">
-                    {plan.priceLabel}
-                    <span className="ml-2 text-sm font-normal text-black/55">{plan.priceNote}</span>
-                  </p>
-                </div>
-                <p className="mt-3 text-sm text-black/60">{plan.description}</p>
-                <p className="mt-4 text-sm">
-                  <span className="font-medium">Generations:</span> {plan.generationLimit}
-                </p>
-                <p className="mt-1 text-sm">
-                  <span className="font-medium">Exports:</span> {plan.exportLimit}
-                </p>
-                <Link
-                  href={plan.cta.href}
-                  className={`btn mt-6 ${plan.highlighted ? "btn-primary" : "btn-secondary"}`}
+            {PLANS.map((plan) => {
+              const cta = planCtaForAuth(plan, signedIn);
+              return (
+                <article
+                  key={plan.id}
+                  className={`panel rounded-3xl p-6 ${plan.highlighted ? "ring-2 ring-[var(--forest)]" : ""}`}
                 >
-                  {plan.cta.label}
-                </Link>
-              </article>
-            ))}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-2xl">{plan.name}</h3>
+                    <p className="text-2xl font-semibold text-[var(--forest-deep)]">
+                      {plan.priceLabel}
+                      <span className="ml-2 text-sm font-normal text-black/55">{plan.priceNote}</span>
+                    </p>
+                  </div>
+                  <p className="mt-3 text-sm text-black/60">{plan.description}</p>
+                  <p className="mt-4 text-sm">
+                    <span className="font-medium">Generations:</span> {plan.generationLimit}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    <span className="font-medium">Exports:</span> {plan.exportLimit}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    <span className="font-medium">Reference uploads:</span>{" "}
+                    {plan.id === "free"
+                      ? "Up to 10 files / project · 5 MB each (enforced)"
+                      : "Up to 40 files / project · 10 MB each (planned)"}
+                  </p>
+                  <Link
+                    href={cta.href}
+                    className={`btn mt-6 ${plan.highlighted ? "btn-primary" : "btn-secondary"}`}
+                    data-cta-label={cta.label}
+                  >
+                    {cta.label}
+                  </Link>
+                </article>
+              );
+            })}
           </div>
         </section>
 
         <section className="mx-auto max-w-6xl px-4 pb-8 md:px-8">
           <div className="rounded-[2rem] bg-[var(--forest-deep)] px-6 py-12 text-[#f6f0e4] md:px-12">
             <h2 className="text-3xl md:text-4xl">Ready to create your brand mark?</h2>
-            <p
-              className="mt-3 max-w-xl text-[#efe7d8]"
-              style={{ opacity: 0.9 }}
-            >
-              Open a project, generate concepts, and leave with a Brand Kit you can reopen anytime.
+            <p className="mt-3 max-w-xl text-[#efe7d8]" style={{ opacity: 0.9 }}>
+              Open a project, upload references, generate concepts, and leave with a Brand Kit you can
+              reopen anytime.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/signup" className="btn btn-on-dark-primary">
-                Get Started
-              </Link>
-              <Link href="/gallery" className="btn btn-on-dark">
-                Browse examples
-              </Link>
-            </div>
+            <MarketingCtaGroup
+              ctas={closingCtas}
+              tone="on-dark"
+              className="mt-8"
+              data-testid="final-ctas"
+            />
           </div>
         </section>
       </main>

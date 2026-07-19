@@ -33,6 +33,17 @@ export type Personality = (typeof PERSONALITIES)[number];
 export type LayoutDirection = (typeof LAYOUTS)[number];
 export type TypographyDirection = (typeof TYPOGRAPHY_DIRECTIONS)[number];
 
+export type LogoReferenceBrief = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  note: string | null;
+  kind: string;
+  extractedText: string | null;
+  supportedInProvider: boolean;
+  unsupportedReason?: string;
+};
+
 export type LogoBrief = {
   businessName: string;
   tagline?: string;
@@ -44,6 +55,8 @@ export type LogoBrief = {
   iconIdeas?: string;
   typographyDirection: TypographyDirection;
   layoutDirection: LayoutDirection;
+  /** Active reference materials selected for this generation. */
+  references?: LogoReferenceBrief[];
 };
 
 export type ConceptPalette = {

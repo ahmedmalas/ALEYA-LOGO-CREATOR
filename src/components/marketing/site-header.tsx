@@ -1,6 +1,5 @@
 import { BrandHomeLink } from "@/components/brand-home-link";
-import { brandHomePath } from "@/lib/auth/brand-home";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthState } from "@/lib/auth/session";
 import Link from "next/link";
 
 export async function SiteHeader({
@@ -10,12 +9,7 @@ export async function SiteHeader({
   solid?: boolean;
   tone?: "light" | "dark";
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const signedIn = Boolean(user);
-  const homeHref = brandHomePath(signedIn);
+  const { signedIn } = await getAuthState();
 
   const onDark = tone === "dark" && !solid;
   const navClass = onDark
@@ -29,6 +23,7 @@ export async function SiteHeader({
           ? "border-black/8 bg-[rgba(247,243,234,0.92)] backdrop-blur-md"
           : "border-transparent bg-transparent"
       }`}
+      data-auth={signedIn ? "signed-in" : "signed-out"}
     >
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 md:px-8">
         <BrandHomeLink
@@ -49,15 +44,25 @@ export async function SiteHeader({
         <nav
           className="flex flex-wrap items-center justify-end gap-2 text-sm md:gap-3"
           aria-label="Primary"
-          data-brand-home-server={homeHref}
+          data-testid="marketing-primary-nav"
         >
           {signedIn ? (
-            <Link
-              href="/dashboard"
-              className={`min-h-10 inline-flex items-center px-1 ${navClass}`}
-            >
-              Dashboard
-            </Link>
+            <>
+              <Link
+                href="/dashboard"
+                className={`min-h-10 inline-flex items-center px-1 ${navClass}`}
+                data-cta-label="Dashboard"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/projects/new"
+                className={`min-h-10 inline-flex items-center px-1 ${navClass}`}
+                data-cta-label="Create New Logo"
+              >
+                Create New Logo
+              </Link>
+            </>
           ) : null}
           <Link href="/gallery" className={`min-h-10 inline-flex items-center px-1 ${navClass}`}>
             Gallery
@@ -70,6 +75,7 @@ export async function SiteHeader({
               <button
                 className={`btn min-h-10 px-3 py-2 text-sm ${onDark ? "btn-on-dark" : "btn-secondary"}`}
                 type="submit"
+                data-cta-label="Sign out"
               >
                 Sign out
               </button>
@@ -79,6 +85,7 @@ export async function SiteHeader({
               <Link
                 href="/login"
                 className={`btn min-h-10 px-3 py-2 text-sm ${onDark ? "btn-on-dark" : "btn-secondary"}`}
+                data-cta-label="Sign In"
               >
                 Sign In
               </Link>
@@ -87,6 +94,7 @@ export async function SiteHeader({
                 className={`btn min-h-10 px-3 py-2 text-sm ${
                   onDark ? "btn-on-dark-primary" : "btn-primary"
                 }`}
+                data-cta-label="Get Started"
               >
                 Get Started
               </Link>

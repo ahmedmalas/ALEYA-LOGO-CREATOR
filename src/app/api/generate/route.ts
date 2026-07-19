@@ -1,3 +1,4 @@
+import { loadActiveReferences, withReferences } from "@/lib/references/brief";
 import { runGenerationJob } from "@/lib/logo/generation-service";
 import { ProviderError } from "@/lib/providers";
 import { createClient } from "@/lib/supabase/server";
@@ -10,6 +11,7 @@ const schema = z.object({
   count: z.number().int().min(1).max(8).default(4),
   idempotencyKey: z.string().min(8).max(120),
   kind: z.enum(["generate", "regenerate"]).default("generate"),
+  referenceIds: z.array(z.string().uuid()).optional(),
 });
 
 export async function POST(request: Request) {
@@ -29,18 +31,28 @@ export async function POST(request: Request) {
       .single();
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
-    const brief: LogoBrief = {
-      businessName: project.business_name,
-      tagline: project.tagline ?? undefined,
-      industry: project.industry,
-      personality: project.personality,
-      style: project.style,
-      preferredColors: project.preferred_colors ?? [],
-      avoidColors: project.avoid_colors ?? [],
-      iconIdeas: project.icon_ideas ?? undefined,
-      typographyDirection: project.typography_direction,
-      layoutDirection: project.layout_direction,
-    };
+    const references = await loadActiveReferences(
+      supabase,
+      project.id,
+      user.id,
+      body.referenceIds,
+    );
+
+    const brief: LogoBrief = withReferences(
+      {
+        businessName: project.business_name,
+        tagline: project.tagline ?? undefined,
+        industry: project.industry,
+        personality: project.personality,
+        style: project.style,
+        preferredColors: project.preferred_colors ?? [],
+        avoidColors: project.avoid_colors ?? [],
+        iconIdeas: project.icon_ideas ?? undefined,
+        typographyDirection: project.typography_direction,
+        layoutDirection: project.layout_direction,
+      },
+      references,
+    );
 
     const result = await runGenerationJob({
       supabase,
@@ -52,7 +64,10 @@ export async function POST(request: Request) {
       count: body.count,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      referencesUsed: references,
+    });
   } catch (error) {
     if (error && typeof error === "object" && "issues" in error) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });

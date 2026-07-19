@@ -25,7 +25,20 @@ export function AppShell({
           aria-label="App"
         >
           <Link href="/dashboard" className="min-h-10 inline-flex items-center hover:text-[var(--forest)]">
-            Projects
+            Dashboard
+          </Link>
+          <Link
+            href="/projects/new"
+            className="min-h-10 inline-flex items-center hover:text-[var(--forest)]"
+            data-cta-label="Create New Logo"
+          >
+            Create New Logo
+          </Link>
+          <Link
+            href="/dashboard#projects"
+            className="min-h-10 inline-flex items-center hover:text-[var(--forest)]"
+          >
+            My Projects
           </Link>
           <Link href="/brand-kits" className="min-h-10 inline-flex items-center hover:text-[var(--forest)]">
             Brand Kits
