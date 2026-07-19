@@ -45,6 +45,9 @@ export function handleRouteError(error: unknown, fallback = "Request failed") {
       429,
     );
   }
+  if (status === 402 || status === 403 || status === 503) {
+    return jsonError(error instanceof Error ? error.message : fallback, status);
+  }
   console.error("[api]", error);
   return jsonError(fallback, 500);
 }

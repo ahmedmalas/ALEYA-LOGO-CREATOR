@@ -10,6 +10,7 @@ type PlanPayload = {
   usage?: UsageSnapshot;
   plan?: PlanDefinition;
   billing?: { connected: boolean; status: string };
+  waitlist?: { active: boolean; joinedAt?: string };
 };
 
 function AccountPlanInner() {
@@ -34,24 +35,24 @@ function AccountPlanInner() {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("waitlist") === "pro" && data?.usage?.planStatus !== "waitlist") {
-      setMessage("Pro checkout is unavailable. Use Join Pro waitlist below — no payment is taken.");
+    if (searchParams.get("waitlist") === "pro" && !data?.waitlist?.active) {
+      setMessage("Pro checkout is unavailable. Use Join waitlist below — no payment is taken.");
     }
-  }, [searchParams, data?.usage?.planStatus]);
+  }, [searchParams, data?.waitlist?.active]);
 
-  async function joinWaitlist() {
+  async function postAction(action: "join_pro_waitlist" | "leave_pro_waitlist") {
     setBusy(true);
     setError(null);
     setMessage(null);
     const res = await fetch("/api/account/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "join_pro_waitlist" }),
+      body: JSON.stringify({ action }),
     });
     const json = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
-      setError(json.error ?? "Could not join waitlist");
+      setError(json.error ?? "Could not update waitlist");
       return;
     }
     setMessage(json.message);
@@ -62,7 +63,7 @@ function AccountPlanInner() {
     return <p className="text-black/60">{error ?? "Loading plan…"}</p>;
   }
 
-  const { usage, plan, billing } = data;
+  const { usage, plan, billing, waitlist } = data;
 
   return (
     <div className="space-y-6" data-testid="account-plan">
@@ -85,18 +86,20 @@ function AccountPlanInner() {
             <p className="mt-1 text-black/55">{usage.generationsRemainingHour} remaining</p>
           </div>
           <div className="rounded-2xl bg-[rgba(31,77,69,0.06)] p-4 text-sm">
+            <p className="font-medium">Exports (last hour)</p>
+            <p className="mt-1 text-2xl text-[var(--forest-deep)]">{usage.exportsUsedHour}</p>
+            <p className="mt-1 text-black/55">{usage.exportAllowanceLabel}</p>
+          </div>
+          <div className="rounded-2xl bg-[rgba(31,77,69,0.06)] p-4 text-sm">
             <p className="font-medium">Reference storage</p>
             <p className="mt-1 text-2xl text-[var(--forest-deep)]">{usage.referenceCount} files</p>
             <p className="mt-1 text-black/55">{usage.referenceBytesLabel}</p>
           </div>
           <div className="rounded-2xl bg-[rgba(31,77,69,0.06)] p-4 text-sm">
             <p className="font-medium">Refinements (last hour)</p>
-            <p className="mt-1">{usage.refinementsUsedHour}</p>
-          </div>
-          <div className="rounded-2xl bg-[rgba(31,77,69,0.06)] p-4 text-sm">
-            <p className="font-medium">Exports</p>
-            <p className="mt-1">{usage.exportAllowanceLabel}</p>
-            <p className="mt-1 text-black/55">{usage.exportsUsedHour} recorded this hour</p>
+            <p className="mt-1">
+              {usage.refinementsUsedHour} / {usage.refinementsPerHour}
+            </p>
           </div>
         </div>
         <ul className="mt-2 space-y-1 text-sm text-black/70">
@@ -112,35 +115,50 @@ function AccountPlanInner() {
         </ul>
       </section>
 
-      <section className="panel space-y-3 rounded-3xl p-6">
-        <h2 className="text-xl">Billing</h2>
+      <section className="panel space-y-3 rounded-3xl p-6" data-testid="waitlist-section">
+        <h2 className="text-xl">Pro waitlist</h2>
         <p className="text-sm text-black/60" data-testid="billing-status">
           {billing?.status ?? "Billing status unknown"}
         </p>
         {!billing?.connected ? (
           <>
             <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              Paid checkout is not connected. Joining the Pro waitlist does not charge a card and
-              does not upgrade your generation limits.
+              Paid checkout is not connected. Joining the waitlist does not charge a card and does
+              not grant Pro limits.
             </p>
-            {usage.planStatus === "waitlist" ? (
-              <p className="text-sm text-[var(--forest-deep)]" role="status">
-                You are already on the Pro waitlist.
-              </p>
+            {waitlist?.active ? (
+              <div className="space-y-3" data-testid="waitlist-confirmed">
+                <p className="text-sm text-[var(--forest-deep)]" role="status">
+                  You are on the Pro waitlist
+                  {waitlist.joinedAt
+                    ? ` (joined ${new Date(waitlist.joinedAt).toLocaleString()})`
+                    : ""}
+                  . Your plan remains Free.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy}
+                  onClick={() => void postAction("leave_pro_waitlist")}
+                >
+                  {busy ? "Saving…" : "Leave waitlist"}
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
                 className="btn btn-primary"
                 disabled={busy}
-                onClick={() => void joinWaitlist()}
+                data-cta-label="Join waitlist"
+                onClick={() => void postAction("join_pro_waitlist")}
               >
-                {busy ? "Saving…" : "Join Pro waitlist"}
+                {busy ? "Saving…" : "Join waitlist"}
               </button>
             )}
           </>
         ) : (
           <p className="text-sm text-black/60">
-            Billing keys detected — wire Stripe Checkout before claiming upgrades succeed.
+            Billing keys detected — wire real checkout before claiming a paid upgrade.
           </p>
         )}
         <Link href="/pricing" className="btn btn-secondary inline-flex">

@@ -42,6 +42,15 @@ export type LogoReferenceBrief = {
   extractedText: string | null;
   supportedInProvider: boolean;
   unsupportedReason?: string;
+  analysisStatus?: string;
+  analysisMode?: string | null;
+  analysis?: Record<string, unknown> | null;
+  analysisConfirmed?: Record<string, unknown> | null;
+  analysisProvider?: string | null;
+  analysisModel?: string | null;
+  analysisError?: string | null;
+  pdfPagesProcessed?: number[];
+  visuallyAnalysed?: boolean;
 };
 
 export type LogoBrief = {

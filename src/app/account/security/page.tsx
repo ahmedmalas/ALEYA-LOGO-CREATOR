@@ -1,16 +1,27 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 export default function AccountSecurityPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [hardDeleteAvailable, setHardDeleteAvailable] = useState(false);
+  const [remainsStored, setRemainsStored] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/account/security");
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) setHardDeleteAvailable(Boolean(json.hardDeleteAvailable));
+    })();
+  }, []);
 
   async function post(body: Record<string, unknown>) {
     setBusy(String(body.action));
     setError(null);
     setMessage(null);
+    setRemainsStored(null);
     const res = await fetch("/api/account/security", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -23,8 +34,11 @@ export default function AccountSecurityPage() {
       return;
     }
     setMessage(json.message ?? "Done.");
-    if (body.action === "delete_account") {
-      window.location.href = "/";
+    if (Array.isArray(json.remainsStored)) setRemainsStored(json.remainsStored);
+    if (body.action === "deactivate_account" || body.action === "hard_delete_account") {
+      window.setTimeout(() => {
+        window.location.href = "/";
+      }, 1800);
     }
   }
 
@@ -98,25 +112,72 @@ export default function AccountSecurityPage() {
         </div>
       </section>
 
-      <section className="panel space-y-3 rounded-3xl border border-red-200 p-6">
-        <h2 className="text-xl text-[var(--danger)]">Delete account</h2>
+      <section className="panel space-y-3 rounded-3xl border border-amber-200 p-6" data-testid="deactivate-account">
+        <h2 className="text-xl">Deactivate account</h2>
         <p className="text-sm text-black/60">
-          Marks the account canceled, signs out all sessions, and stops normal use. Hard deletion of
-          the auth user requires a privileged admin job and is not performed from the browser.
+          Deactivation signs you out and blocks creative actions. It is <strong>not</strong> a
+          permanent wipe. Your projects, references, Brand Kits, usage history, and Auth user remain
+          stored until a secure hard-delete runs.
         </p>
         <button
           type="button"
           className="btn btn-secondary"
-          disabled={busy === "delete_account"}
+          disabled={busy === "deactivate_account"}
           onClick={() => {
-            if (window.confirm("Type DELETE in the next prompt to confirm account cancellation.")) {
-              const value = window.prompt('Type DELETE to confirm');
-              if (value === "DELETE") void post({ action: "delete_account", confirm: "DELETE" });
+            if (
+              window.confirm(
+                "Deactivate this account? You will be signed out. Data remains stored until hard-delete.",
+              )
+            ) {
+              const value = window.prompt('Type DEACTIVATE to confirm');
+              if (value === "DEACTIVATE") {
+                void post({ action: "deactivate_account", confirm: "DEACTIVATE" });
+              }
             }
           }}
         >
-          Cancel / delete account
+          Deactivate account
         </button>
+      </section>
+
+      <section className="panel space-y-3 rounded-3xl border border-red-200 p-6" data-testid="hard-delete-account">
+        <h2 className="text-xl text-[var(--danger)]">Permanent deletion</h2>
+        {hardDeleteAvailable ? (
+          <>
+            <p className="text-sm text-black/60">
+              Hard delete removes storage objects, owned database rows, and the Supabase Auth user
+              using a server-only service role. This cannot be undone.
+            </p>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy === "hard_delete_account"}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Permanently delete this account and all owned data? This cannot be undone.",
+                  )
+                ) {
+                  const value = window.prompt('Type DELETE FOREVER to confirm');
+                  if (value === "DELETE FOREVER") {
+                    void post({
+                      action: "hard_delete_account",
+                      confirm: "DELETE FOREVER",
+                      recentAuthConfirmed: true,
+                    });
+                  }
+                }
+              }}
+            >
+              Permanently delete account
+            </button>
+          </>
+        ) : (
+          <p className="text-sm text-black/60">
+            Permanent hard-delete is unavailable because the server does not have
+            SUPABASE_SERVICE_ROLE_KEY configured. Use Deactivate account for now.
+          </p>
+        )}
       </section>
 
       {error ? (
@@ -125,9 +186,16 @@ export default function AccountSecurityPage() {
         </p>
       ) : null}
       {message ? (
-        <p className="text-sm text-[var(--forest-deep)]" role="status">
+        <p className="text-sm text-[var(--forest-deep)]" role="status" data-testid="security-status">
           {message}
         </p>
+      ) : null}
+      {remainsStored ? (
+        <ul className="list-disc pl-5 text-sm text-black/60">
+          {remainsStored.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );

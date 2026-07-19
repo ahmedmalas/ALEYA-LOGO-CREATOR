@@ -1,3 +1,7 @@
+import { analyseProjectReference, parseConfirmedAnalysis } from "@/lib/references/analyse";
+import { getVisionConfig } from "@/lib/references/vision";
+import { VISUAL_ANALYSIS_UNAVAILABLE_MESSAGE } from "@/lib/references/analysis-types";
+import { PlanLimitError } from "@/lib/plans/enforce";
 import { getUserPlanId } from "@/lib/plans/usage";
 import {
   createSignedReferenceUrls,
@@ -10,6 +14,25 @@ import { formatBytes, getReferenceLimits, REFERENCE_HELP_TEXT } from "@/lib/refe
 import { handleRouteError, jsonError, jsonOk, requireUser } from "@/lib/security/api";
 
 type Params = { params: Promise<{ id: string }> };
+
+function serializeReference(
+  row: Awaited<ReturnType<typeof listProjectReferences>>[number],
+  urls: Record<string, { url: string | null; previewUrl: string | null }>,
+  usedInGeneration: boolean,
+) {
+  const vision = getVisionConfig();
+  return {
+    ...row,
+    signedUrl: urls[row.id]?.url ?? null,
+    previewUrl: urls[row.id]?.previewUrl ?? null,
+    usedInGeneration,
+    visuallyAnalysed: row.analysis_status === "succeeded" && row.analysis_mode === "visual",
+    visionAvailable: vision.available,
+    visionProvider: vision.provider,
+    visionModel: vision.model,
+    visualAnalysisUnavailableMessage: VISUAL_ANALYSIS_UNAVAILABLE_MESSAGE,
+  };
+}
 
 export async function GET(_request: Request, { params }: Params) {
   try {
@@ -29,18 +52,22 @@ export async function GET(_request: Request, { params }: Params) {
         .in("reference_id", referenceIds);
       usedIds = new Set((usedRows ?? []).map((row) => row.reference_id));
     }
+    const vision = getVisionConfig();
     return jsonOk({
-      references: rows.map((row) => ({
-        ...row,
-        signedUrl: urls[row.id]?.url ?? null,
-        previewUrl: urls[row.id]?.previewUrl ?? null,
-        usedInGeneration: usedIds.has(row.id),
-      })),
+      references: rows.map((row) =>
+        serializeReference(row, urls, usedIds.has(row.id)),
+      ),
       limits: {
         ...limits,
         maxFileBytesLabel: formatBytes(limits.maxFileBytes),
         maxTotalBytesPerUserLabel: formatBytes(limits.maxTotalBytesPerUser),
         helpText: REFERENCE_HELP_TEXT,
+      },
+      vision: {
+        available: vision.available,
+        provider: vision.provider,
+        model: vision.model,
+        unavailableMessage: VISUAL_ANALYSIS_UNAVAILABLE_MESSAGE,
       },
     });
   } catch (error) {
@@ -63,7 +90,7 @@ export async function POST(request: Request, { params }: Params) {
     if (!(file.size > 0)) {
       return jsonError("A real file is required — notes alone cannot create a reference.", 400);
     }
-    const row = await uploadProjectReference({
+    let row = await uploadProjectReference({
       supabase,
       ownerId: user.id,
       projectId,
@@ -74,18 +101,25 @@ export async function POST(request: Request, { params }: Params) {
       title: typeof title === "string" ? title : null,
       kind: typeof kind === "string" ? kind : null,
     });
+
+    // Analyse immediately so users see detected details before generating.
+    row = await analyseProjectReference({
+      supabase,
+      ownerId: user.id,
+      reference: row,
+    });
+
     const urls = await createSignedReferenceUrls(supabase, [row]);
     return jsonOk(
       {
-        reference: {
-          ...row,
-          signedUrl: urls[row.id]?.url ?? null,
-          previewUrl: urls[row.id]?.previewUrl ?? null,
-        },
+        reference: serializeReference(row, urls, false),
       },
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof PlanLimitError) {
+      return jsonError(error.message, error.status);
+    }
     const status = (error as Error & { status?: number }).status;
     if (status) return jsonError(error instanceof Error ? error.message : "Upload failed", status);
     return handleRouteError(error);
@@ -102,8 +136,44 @@ export async function PATCH(request: Request, { params }: Params) {
       title?: string | null;
       isActive?: boolean;
       kind?: string;
+      action?: "reanalyse" | "confirm_analysis";
+      analysisConfirmed?: unknown;
     };
     if (!body.referenceId) return jsonError("referenceId is required", 400);
+
+    if (body.action === "reanalyse") {
+      const rows = await listProjectReferences(supabase, projectId, user.id);
+      const existing = rows.find((row) => row.id === body.referenceId);
+      if (!existing) return jsonError("Reference not found", 404);
+      const analysed = await analyseProjectReference({
+        supabase,
+        ownerId: user.id,
+        reference: existing,
+      });
+      const urls = await createSignedReferenceUrls(supabase, [analysed]);
+      return jsonOk({ reference: serializeReference(analysed, urls, false) });
+    }
+
+    if (body.action === "confirm_analysis") {
+      const parsed = parseConfirmedAnalysis(body.analysisConfirmed);
+      if (!parsed) return jsonError("Invalid analysis payload", 400);
+      const { data, error } = await supabase
+        .from("project_references")
+        .update({
+          analysis_confirmed_json: parsed,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", body.referenceId)
+        .eq("project_id", projectId)
+        .eq("owner_id", user.id)
+        .select("*")
+        .maybeSingle();
+      if (error) return jsonError(error.message, 400);
+      if (!data) return jsonError("Reference not found", 404);
+      const urls = await createSignedReferenceUrls(supabase, [data]);
+      return jsonOk({ reference: serializeReference(data, urls, false) });
+    }
+
     const row = await updateProjectReference({
       supabase,
       ownerId: user.id,

@@ -72,6 +72,7 @@ export async function POST(request: Request) {
     if (error && typeof error === "object" && "issues" in error) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
+    const errStatus = (error as { status?: number }).status;
     const status =
       error instanceof ProviderError
         ? error.code === "rate_limited"
@@ -79,24 +80,25 @@ export async function POST(request: Request) {
           : error.code === "missing_credentials"
             ? 503
             : 502
-        : (error as { status?: number }).status === 429
-          ? 429
+        : errStatus === 429 || errStatus === 402 || errStatus === 403
+          ? errStatus
           : 500;
     const message =
-      error instanceof ProviderError
-        ? error.message
-        : (error as { status?: number }).status === 429
-          ? error instanceof Error
-            ? error.message
-            : "Rate limit exceeded"
-          : "Generation failed. Please try again.";
-    if (!(error instanceof ProviderError) && (error as { status?: number }).status !== 429) {
+      error instanceof ProviderError || errStatus === 429 || errStatus === 402
+        ? error instanceof Error
+          ? error.message
+          : "Request failed"
+        : "Generation failed. Please try again.";
+    if (!(error instanceof ProviderError) && errStatus !== 429 && errStatus !== 402) {
       console.error("[generate]", error);
     }
     return NextResponse.json(
       {
         error: message,
-        code: error instanceof ProviderError ? error.code : undefined,
+        code:
+          error instanceof ProviderError
+            ? error.code
+            : (error as { code?: string }).code,
       },
       { status },
     );

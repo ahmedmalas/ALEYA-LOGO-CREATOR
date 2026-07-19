@@ -49,7 +49,7 @@ describe("marketing CTAs", () => {
 
     const proWhileFree = planCtaForAuth(PLANS[1], true, "free");
     expect(proWhileFree.href).toContain("/account/plan");
-    expect(proWhileFree.label).toMatch(/waitlist|Upgrade/i);
+    expect(proWhileFree.label).toMatch(/waitlist|Notify me/i);
     expect(FORBIDDEN_SIGNED_IN_CTA_LABELS as readonly string[]).not.toContain(proWhileFree.label);
 
     for (const plan of PLANS) {

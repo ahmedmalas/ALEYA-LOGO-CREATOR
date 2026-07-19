@@ -8,7 +8,11 @@ export type UsageSnapshot = {
   generationsUsedHour: number;
   generationsRemainingHour: number;
   refinementsUsedHour: number;
+  refinementsPerHour: number;
+  refinementsRemainingHour: number;
   exportsUsedHour: number;
+  exportsPerHour: number | null;
+  exportsRemainingHour: number | null;
   exportAllowanceLabel: string;
   referenceBytesUsed: number;
   referenceBytesLimit: number;
@@ -51,16 +55,16 @@ export async function getUsageSnapshot(
     { count: brandKitCount },
   ] = await Promise.all([
     supabase
-      .from("generation_jobs")
+      .from("usage_events")
       .select("id", { count: "exact", head: true })
       .eq("owner_id", userId)
-      .in("kind", ["generate", "regenerate"])
+      .eq("event_type", "generation")
       .gte("created_at", since),
     supabase
-      .from("generation_jobs")
+      .from("usage_events")
       .select("id", { count: "exact", head: true })
       .eq("owner_id", userId)
-      .eq("kind", "refine")
+      .eq("event_type", "refinement")
       .gte("created_at", since),
     supabase
       .from("usage_events")
@@ -80,6 +84,8 @@ export async function getUsageSnapshot(
   ]);
 
   const generationsUsedHour = genCount ?? 0;
+  const refinementsUsedHour = refineCount ?? 0;
+  const exportsUsedHour = exportCount ?? 0;
   const referenceBytesUsed = (refs ?? []).reduce(
     (sum, row) => sum + Number(row.size_bytes ?? 0),
     0,
@@ -91,10 +97,17 @@ export async function getUsageSnapshot(
     generationsPerHour: plan.generationsPerHour,
     generationsUsedHour,
     generationsRemainingHour: Math.max(0, plan.generationsPerHour - generationsUsedHour),
-    refinementsUsedHour: refineCount ?? 0,
-    exportsUsedHour: exportCount ?? 0,
+    refinementsUsedHour,
+    refinementsPerHour: plan.refinementsPerHour,
+    refinementsRemainingHour: Math.max(0, plan.refinementsPerHour - refinementsUsedHour),
+    exportsUsedHour,
+    exportsPerHour: plan.exportsPerHour,
+    exportsRemainingHour:
+      plan.exportsPerHour == null ? null : Math.max(0, plan.exportsPerHour - exportsUsedHour),
     exportAllowanceLabel:
-      plan.exportsPerHour == null ? "Unlimited ZIP exports on current plan" : `${plan.exportsPerHour}/hour`,
+      plan.exportsPerHour == null
+        ? "Unlimited ZIP exports on current plan"
+        : `${exportsUsedHour} / ${plan.exportsPerHour} this hour`,
     referenceBytesUsed,
     referenceBytesLimit: plan.referenceMaxTotalBytes,
     referenceBytesLabel: `${formatBytesLabel(referenceBytesUsed)} / ${formatBytesLabel(plan.referenceMaxTotalBytes)}`,

@@ -32,13 +32,11 @@ export const PLANS: Plan[] = PLAN_LIST.map((plan) => ({
   priceLabel: plan.priceLabel,
   priceNote: plan.billingPeriodLabel,
   description: plan.description,
-  generationLimit: `${plan.generationsPerHour} logo generations per hour (enforced for Free)`,
+  generationLimit: `${plan.generationsPerHour} logo generations per hour (enforced)`,
   exportLimit:
-    plan.id === "free"
-      ? "ZIP export packs with SVG + PNG variants"
-      : plan.paidCheckoutAvailable
-        ? "Higher export throughput"
-        : "Higher export throughput (when billing is live)",
+    plan.exportsPerHour == null
+      ? "Unlimited ZIP export packs (SVG + PNG variants)"
+      : `${plan.exportsPerHour} ZIP exports per hour (enforced)`,
   features: plan.marketingFeatures,
   cta: plan.signedOutCta,
   highlighted: plan.highlighted,

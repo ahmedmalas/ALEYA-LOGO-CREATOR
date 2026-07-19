@@ -73,14 +73,33 @@ export function planCtaForAuth(
   if (plan.id === currentPlanId) {
     return { label: "Current plan", href: "/account/plan" };
   }
-  // Signed-in users never enter signup. Pro without billing → waitlist in account.
+  // Signed-in users never enter signup. While billing is disconnected, Pro is waitlist-only.
   if (plan.id === "pro") {
-    return plan.definition.paidCheckoutAvailable
-      ? { label: "Upgrade to Pro", href: "/account/plan" }
-      : { label: "Join Pro waitlist", href: "/account/plan?waitlist=pro" };
+    return {
+      label: plan.definition.paidCheckoutAvailable ? "Notify me" : "Join waitlist",
+      href: "/account/plan?waitlist=pro",
+    };
   }
   return { label: "View plan usage", href: "/account/plan" };
 }
 
 /** Labels that must never appear for authenticated marketing surfaces. */
-export const FORBIDDEN_SIGNED_IN_CTA_LABELS = ["Get Started", "Sign In", "Join waitlist"] as const;
+export const FORBIDDEN_SIGNED_IN_CTA_LABELS = [
+  "Get Started",
+  "Sign In",
+  "Buy",
+  "Subscribe",
+  "Upgrade Now",
+  "Start Pro",
+  "Checkout",
+] as const;
+
+/** Labels forbidden on Pro CTAs while billing is disconnected. */
+export const FORBIDDEN_UNBILLED_PRO_LABELS = [
+  "Buy",
+  "Subscribe",
+  "Upgrade Now",
+  "Upgrade to Pro",
+  "Start Pro",
+  "Checkout",
+] as const;

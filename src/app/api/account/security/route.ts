@@ -1,3 +1,5 @@
+import { deactivateAccount, hardDeleteAccount } from "@/lib/account/delete-account";
+import { serviceRoleConfigured } from "@/lib/supabase/admin";
 import { handleRouteError, jsonError, jsonOk, requireUser } from "@/lib/security/api";
 import { z } from "zod";
 
@@ -10,10 +12,28 @@ const resetSchema = z.object({
   action: z.literal("request_reset_email"),
 });
 
-const deleteSchema = z.object({
-  action: z.literal("delete_account"),
-  confirm: z.literal("DELETE"),
+const deactivateSchema = z.object({
+  action: z.literal("deactivate_account"),
+  confirm: z.literal("DEACTIVATE"),
 });
+
+const hardDeleteSchema = z.object({
+  action: z.literal("hard_delete_account"),
+  confirm: z.literal("DELETE FOREVER"),
+  recentAuthConfirmed: z.literal(true),
+});
+
+export async function GET() {
+  try {
+    await requireUser();
+    return jsonOk({
+      hardDeleteAvailable: serviceRoleConfigured(),
+      deactivateAvailable: true,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -41,23 +61,34 @@ export async function POST(request: Request) {
       });
     }
 
-    if (action === "delete_account") {
-      deleteSchema.parse(raw);
-      // Service-role deletion is not exposed in the browser. Soft-disable via profile + sign out.
-      await supabase
-        .from("user_profiles")
-        .update({
-          plan_status: "canceled",
-          display_name: "Deleted account",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", user.id);
-      await supabase.auth.signOut({ scope: "global" });
-      return jsonOk({
-        message:
-          "Signed out of all sessions and marked the account canceled. Full hard-delete of auth.users requires an admin/service-role job (not exposed to the browser).",
-        requiresHardDeleteJob: true,
+    if (action === "deactivate_account") {
+      deactivateSchema.parse(raw);
+      const result = await deactivateAccount(supabase, user.id);
+      return jsonOk(result);
+    }
+
+    if (action === "hard_delete_account") {
+      hardDeleteSchema.parse(raw);
+      if (!serviceRoleConfigured()) {
+        return jsonError(
+          "Hard delete is unavailable because SUPABASE_SERVICE_ROLE_KEY is not configured on the server. Use Deactivate account instead.",
+          503,
+        );
+      }
+      const result = await hardDeleteAccount({
+        userClient: supabase,
+        userId: user.id,
+        email: user.email,
       });
+      return jsonOk(result);
+    }
+
+    // Legacy alias — never advertise as permanent delete.
+    if (action === "delete_account") {
+      return jsonError(
+        "Use deactivate_account (or hard_delete_account when available). Permanent deletion is not implied by this endpoint.",
+        400,
+      );
     }
 
     return jsonError("Unknown security action", 400);

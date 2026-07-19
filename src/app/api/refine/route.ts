@@ -83,8 +83,9 @@ export async function POST(request: Request) {
         error.code === "rate_limited" ? 429 : error.code === "missing_credentials" ? 503 : 502;
       return NextResponse.json({ error: error.message, code: error.code }, { status });
     }
-    if ((error as { status?: number }).status === 429) {
-      return jsonError(error instanceof Error ? error.message : "Rate limit exceeded", 429);
+    const errStatus = (error as { status?: number }).status;
+    if (errStatus === 429 || errStatus === 402 || errStatus === 403) {
+      return jsonError(error instanceof Error ? error.message : "Limit exceeded", errStatus);
     }
     return handleRouteError(error, "Refine failed");
   }

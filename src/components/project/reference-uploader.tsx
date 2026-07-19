@@ -1,5 +1,6 @@
 "use client";
 
+import { ReferenceAnalysisPanel } from "@/components/project/reference-analysis-panel";
 import {
   formatBytes,
   getReferenceLimits,
@@ -34,6 +35,16 @@ export type ReferenceItem = {
   signedUrl?: string | null;
   extracted_text?: string | null;
   usedInGeneration?: boolean;
+  analysis_status?: string;
+  analysis_mode?: string | null;
+  analysis_json?: Record<string, unknown> | null;
+  analysis_confirmed_json?: Record<string, unknown> | null;
+  analysis_provider?: string | null;
+  analysis_model?: string | null;
+  analysis_error?: string | null;
+  pdf_pages_processed?: number[];
+  visuallyAnalysed?: boolean;
+  visionAvailable?: boolean;
 };
 
 type PendingFile = {
@@ -552,6 +563,22 @@ export function ReferenceUploader({
                     <p className="text-xs text-black/55 line-clamp-2">
                       Extracted text preview: {item.extracted_text.slice(0, 160)}
                     </p>
+                  ) : null}
+                  {projectId ? (
+                    <ReferenceAnalysisPanel
+                      projectId={projectId}
+                      referenceId={item.id}
+                      analysisStatus={item.analysis_status}
+                      analysisMode={item.analysis_mode}
+                      analysisError={item.analysis_error}
+                      analysisProvider={item.analysis_provider}
+                      analysisModel={item.analysis_model}
+                      analysis={item.analysis_json as never}
+                      analysisConfirmed={item.analysis_confirmed_json as never}
+                      pdfPagesProcessed={item.pdf_pages_processed}
+                      visionAvailable={item.visionAvailable}
+                      onUpdated={() => void refresh()}
+                    />
                   ) : null}
                 </div>
               </div>

@@ -25,6 +25,15 @@ export type ProjectReferenceRow = {
   kind: string;
   preview_path: string | null;
   extracted_text: string | null;
+  analysis_status?: string;
+  analysis_mode?: string | null;
+  analysis_json?: Record<string, unknown> | null;
+  analysis_confirmed_json?: Record<string, unknown> | null;
+  analysis_provider?: string | null;
+  analysis_model?: string | null;
+  analysis_error?: string | null;
+  pdf_pages_processed?: number[];
+  analyzed_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -320,6 +329,15 @@ export type BriefReference = {
   extractedText: string | null;
   supportedInProvider: boolean;
   unsupportedReason?: string;
+  analysisStatus?: string;
+  analysisMode?: string | null;
+  analysis?: Record<string, unknown> | null;
+  analysisConfirmed?: Record<string, unknown> | null;
+  analysisProvider?: string | null;
+  analysisModel?: string | null;
+  analysisError?: string | null;
+  pdfPagesProcessed?: number[];
+  visuallyAnalysed?: boolean;
 };
 
 export function toBriefReferences(rows: ProjectReferenceRow[]): BriefReference[] {
@@ -329,6 +347,8 @@ export function toBriefReferences(rows: ProjectReferenceRow[]): BriefReference[]
       const isImage = row.mime_type.startsWith("image/");
       const isPdf = row.mime_type === "application/pdf";
       const supportedInProvider = isImage || isPdf;
+      const visuallyAnalysed =
+        row.analysis_status === "succeeded" && row.analysis_mode === "visual";
       const unsupportedReason = supportedInProvider
         ? undefined
         : "This file type is stored but not used for generation yet.";
@@ -341,6 +361,15 @@ export function toBriefReferences(rows: ProjectReferenceRow[]): BriefReference[]
         extractedText: row.extracted_text,
         supportedInProvider,
         unsupportedReason,
+        analysisStatus: row.analysis_status,
+        analysisMode: row.analysis_mode,
+        analysis: row.analysis_json,
+        analysisConfirmed: row.analysis_confirmed_json,
+        analysisProvider: row.analysis_provider,
+        analysisModel: row.analysis_model,
+        analysisError: row.analysis_error,
+        pdfPagesProcessed: row.pdf_pages_processed,
+        visuallyAnalysed,
       };
     });
 }
