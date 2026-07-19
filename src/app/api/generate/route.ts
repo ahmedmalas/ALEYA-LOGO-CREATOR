@@ -1,3 +1,4 @@
+import { generationControlsSchema } from "@/lib/logo/evolution";
 import { loadActiveReferences, withReferences } from "@/lib/references/brief";
 import { runGenerationJob } from "@/lib/logo/generation-service";
 import { ProviderError } from "@/lib/providers";
@@ -12,6 +13,7 @@ const schema = z.object({
   idempotencyKey: z.string().min(8).max(120),
   kind: z.enum(["generate", "regenerate"]).default("generate"),
   referenceIds: z.array(z.string().uuid()).optional(),
+  controls: generationControlsSchema.partial().optional(),
 });
 
 export async function POST(request: Request) {
@@ -38,6 +40,7 @@ export async function POST(request: Request) {
       body.referenceIds,
     );
 
+    const controls = generationControlsSchema.parse(body.controls ?? {});
     const brief: LogoBrief = withReferences(
       {
         businessName: project.business_name,
@@ -50,6 +53,10 @@ export async function POST(request: Request) {
         iconIdeas: project.icon_ideas ?? undefined,
         typographyDirection: project.typography_direction,
         layoutDirection: project.layout_direction,
+        generationControls: {
+          ...controls,
+          exactLogoText: controls.exactLogoText || project.business_name,
+        },
       },
       references,
     );

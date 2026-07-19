@@ -1,4 +1,4 @@
-import { composeSvgConcepts } from "@/lib/logo/svg-composer";
+import { composeRefinedConcept, composeSvgConcepts } from "@/lib/logo/svg-composer";
 import type { GeneratedConcept } from "@/types/logo";
 import { ProviderError, type GenerateRequest, type ImageProvider, type RefineRequest } from "./types";
 
@@ -72,25 +72,13 @@ export class OpenAIImageProvider implements ImageProvider {
   }
 
   async refineConcept(request: RefineRequest): Promise<GeneratedConcept> {
-    const [scaffold] = composeSvgConcepts(
-      {
-        ...request.brief,
-        iconIdeas: `${request.concept.iconConcept}; ${request.instruction}`,
-      },
-      1,
-      `refine:${request.instruction}`,
-    );
-    if (!scaffold) {
-      throw new ProviderError("invalid_request", "Unable to refine concept");
-    }
-    const prompt = `${request.concept.prompt}. Refinement: ${request.instruction}`;
-    const image = await this.generateImage(prompt);
+    const scaffold = composeRefinedConcept(request.brief, request.concept, request.instruction);
+    const image = await this.generateImage(scaffold.prompt);
     return {
       ...scaffold,
-      title: `${request.concept.title} (refined)`,
-      prompt,
       provider: this.name,
       providerMetadata: {
+        ...scaffold.providerMetadata,
         model: this.model,
         imageBase64: image.b64,
         revisedPrompt: image.revisedPrompt,

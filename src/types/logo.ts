@@ -53,6 +53,25 @@ export type LogoReferenceBrief = {
   visuallyAnalysed?: boolean;
 };
 
+export type GenerationMode = "mirror" | "refine" | "advance" | "explore";
+
+export type GenerationControls = {
+  mode: GenerationMode;
+  similarity: number;
+  creativity: number;
+  preserveSymbol: boolean;
+  preserveTypography: boolean;
+  preserveColours: boolean;
+  preserveLayout: boolean;
+  modernisation: number;
+  simplification: number;
+  premiumDirection: boolean;
+  styleDirection: "minimal" | "clinical" | "bold" | "elegant" | "premium" | "luxury";
+  exactLogoText: string;
+  mustNotChange: string;
+  improve: string;
+};
+
 export type LogoBrief = {
   businessName: string;
   tagline?: string;
@@ -66,6 +85,8 @@ export type LogoBrief = {
   layoutDirection: LayoutDirection;
   /** Active reference materials selected for this generation. */
   references?: LogoReferenceBrief[];
+  /** Reference-led evolution controls for this generation. */
+  generationControls?: GenerationControls;
 };
 
 export type ConceptPalette = {
