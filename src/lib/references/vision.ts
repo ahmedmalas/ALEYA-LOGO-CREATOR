@@ -12,8 +12,16 @@ export type VisionConfig = {
   reason?: string;
 };
 
-/** Exact vision model used when OpenAI credentials are present. */
-export const DEFAULT_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o-mini";
+function usingAiGateway() {
+  return Boolean(process.env.AI_GATEWAY_API_KEY && !process.env.OPENAI_API_KEY);
+}
+
+/** Exact vision model used when credentials are present. */
+export function getDefaultVisionModel() {
+  if (process.env.OPENAI_VISION_MODEL) return process.env.OPENAI_VISION_MODEL;
+  // AI Gateway requires provider/model slugs.
+  return usingAiGateway() ? "openai/gpt-4o-mini" : "gpt-4o-mini";
+}
 
 export function getVisionConfig(): VisionConfig {
   const key = process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY;
@@ -27,17 +35,15 @@ export function getVisionConfig(): VisionConfig {
   }
   return {
     available: true,
-    provider: process.env.AI_GATEWAY_API_KEY && !process.env.OPENAI_API_KEY ? "vercel-ai-gateway" : "openai",
-    model: DEFAULT_VISION_MODEL,
+    provider: usingAiGateway() ? "vercel-ai-gateway" : "openai",
+    model: getDefaultVisionModel(),
   };
 }
 
 function openaiBaseUrl() {
   return (
     process.env.OPENAI_BASE_URL ||
-    (process.env.AI_GATEWAY_API_KEY && !process.env.OPENAI_API_KEY
-      ? "https://ai-gateway.vercel.sh/v1"
-      : "https://api.openai.com/v1")
+    (usingAiGateway() ? "https://ai-gateway.vercel.sh/v1" : "https://api.openai.com/v1")
   );
 }
 
@@ -61,6 +67,25 @@ Return ONLY valid JSON matching this shape:
   "pdfPagesProcessed": number[]
 }
 Do not invent trademarks to copy. Describe what is visible. colourPalette should use hex when possible.`;
+
+function sanitizeProviderError(detail: string) {
+  return detail
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
+    .replace(/vck_[A-Za-z0-9_-]+/g, "[redacted]")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]")
+    .slice(0, 240);
+}
+
+async function callVision(body: Record<string, unknown>) {
+  return fetch(`${openaiBaseUrl()}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 export async function analyseImageWithVision(input: {
   mimeType: string;
@@ -89,38 +114,47 @@ export async function analyseImageWithVision(input: {
     .filter(Boolean)
     .join("\n");
 
-  const response = await fetch(`${openaiBaseUrl()}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: userText },
         {
-          role: "user",
-          content: [
-            { type: "text", text: userText },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${input.mimeType};base64,${input.base64}`,
-                detail: "high",
-              },
-            },
-          ],
+          type: "image_url",
+          image_url: {
+            url: `data:${input.mimeType};base64,${input.base64}`,
+            detail: "high",
+          },
         },
       ],
-    }),
+    },
+  ];
+
+  const baseBody = {
+    model: config.model,
+    temperature: 0.2,
+    messages,
+  };
+
+  let response = await callVision({
+    ...baseBody,
+    response_format: { type: "json_object" },
   });
+
+  // Some gateway routes reject response_format; retry once without it.
+  if (!response.ok && response.status === 400) {
+    const detail = await response.text().catch(() => "");
+    if (/response_format/i.test(detail)) {
+      response = await callVision(baseBody);
+    } else {
+      throw new Error(`Vision analysis failed (400): ${sanitizeProviderError(detail)}`);
+    }
+  }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`Vision analysis failed (${response.status}): ${detail.slice(0, 240)}`);
+    throw new Error(`Vision analysis failed (${response.status}): ${sanitizeProviderError(detail)}`);
   }
 
   const json = (await response.json()) as {
@@ -133,7 +167,9 @@ export async function analyseImageWithVision(input: {
   try {
     parsed = JSON.parse(content);
   } catch {
-    throw new Error("Vision provider returned non-JSON analysis.");
+    const fenced = content.match(/\{[\s\S]*\}/);
+    if (!fenced) throw new Error("Vision provider returned non-JSON analysis.");
+    parsed = JSON.parse(fenced[0]);
   }
 
   const analysis = referenceAnalysisSchema.parse({

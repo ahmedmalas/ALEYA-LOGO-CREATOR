@@ -16,7 +16,7 @@ describe("vision provider", () => {
     expect(config.reason).toBe(VISUAL_ANALYSIS_UNAVAILABLE_MESSAGE);
   });
 
-  it("uses openai gpt-4o-mini by default when key present", () => {
+  it("uses openai gpt-4o-mini by default when OpenAI key present", () => {
     vi.stubEnv("OPENAI_API_KEY", "sk-test");
     vi.stubEnv("AI_GATEWAY_API_KEY", "");
     vi.stubEnv("OPENAI_VISION_MODEL", "");
@@ -24,6 +24,16 @@ describe("vision provider", () => {
     expect(config.available).toBe(true);
     expect(config.provider).toBe("openai");
     expect(config.model).toBe("gpt-4o-mini");
+  });
+
+  it("uses AI Gateway provider/model slug when only AI_GATEWAY_API_KEY is set", () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("AI_GATEWAY_API_KEY", "vck-test");
+    vi.stubEnv("OPENAI_VISION_MODEL", "");
+    const config = getVisionConfig();
+    expect(config.available).toBe(true);
+    expect(config.provider).toBe("vercel-ai-gateway");
+    expect(config.model).toBe("openai/gpt-4o-mini");
   });
 
   it("throws the explicit unavailable message when analysing without keys", async () => {
