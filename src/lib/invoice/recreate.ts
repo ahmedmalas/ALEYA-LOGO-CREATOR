@@ -93,13 +93,205 @@ function modeTheme(
   };
 }
 
-/** Build editable regional template from analysis — not a flattened image. */
-export function buildInvoiceTemplate(
+export function isQuantumHireLayout(analysis: InvoiceAnalysis): boolean {
+  if (analysis.layoutProfile === "quantum-hire") return true;
+  if (/quantum\s*hire/i.test(analysis.companyName)) return true;
+  if (/cart\s*n\s*tip/i.test(analysis.customerName)) return true;
+  if (/quantum\s*hire|cart\s*n\s*tip/i.test(analysis.rawTextExcerpt)) return true;
+  const headers = analysis.tableHeaders.map((h) => h.toLowerCase()).join("|");
+  return headers.includes("date") && headers.includes("amount excl");
+}
+
+function buildQuantumHireRegions(
   analysis: InvoiceAnalysis,
-  mode: InvoiceRecreationMode = "refine",
-): InvoiceTemplate {
+  mode: InvoiceRecreationMode,
+): TemplateRegion[] {
+  const m = analysis.margins;
+  const titleSize = mode === "advance" ? 22 : mode === "refine" ? 20 : 18;
+  return [
+    {
+      id: "logo",
+      type: "logo",
+      label: "QH logo",
+      bounds: { x: m.left, y: m.top, width: 110, height: 56 },
+      style: {
+        fontFamily: "Helvetica-Bold",
+        fontSize: 28,
+        fontWeight: "bold",
+        color: analysis.secondaryColor || "#C4A35A",
+        align: "left",
+        background: analysis.primaryColor || "#0F2D26",
+      },
+      binding: "{{company.logo}}",
+      editable: true,
+    },
+    {
+      id: "title",
+      type: "title",
+      label: "Invoice title",
+      bounds: { x: 340, y: m.top, width: 215, height: 28 },
+      style: {
+        fontFamily: "Helvetica-Bold",
+        fontSize: titleSize,
+        fontWeight: "bold",
+        color: "#111111",
+        align: "right",
+      },
+      binding: "{{invoice.title}}",
+      editable: true,
+    },
+    {
+      id: "invoice-meta",
+      type: "invoiceMeta",
+      label: "Invoice metadata",
+      bounds: { x: 340, y: m.top + 32, width: 215, height: 70 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 10,
+        fontWeight: "normal",
+        color: "#333333",
+        align: "right",
+      },
+      binding:
+        "Invoice #: {{invoice.number}}\nInvoice Date: {{invoice.issueDate}}\nDue Date: {{invoice.dueDate}}\nTerms: {{terms}}",
+      editable: true,
+    },
+    {
+      id: "header-divider",
+      type: "decorative",
+      label: "Header divider",
+      bounds: { x: m.left, y: 150, width: 515, height: 2 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 1,
+        fontWeight: "normal",
+        color: "#111111",
+        align: "left",
+        borderColor: "#111111",
+        borderWidth: 1.25,
+      },
+      binding: "",
+      editable: false,
+    },
+    {
+      id: "customer",
+      type: "customer",
+      label: "Bill To",
+      bounds: { x: m.left, y: 168, width: 250, height: 90 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 11,
+        fontWeight: "normal",
+        color: "#111111",
+        align: "left",
+      },
+      binding: "BILL TO\n{{customer.name}}\n{{customer.address}}\n{{customer.email}}",
+      editable: true,
+    },
+    {
+      id: "company",
+      type: "company",
+      label: "From",
+      bounds: { x: 320, y: 168, width: 235, height: 90 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 11,
+        fontWeight: "normal",
+        color: "#111111",
+        align: "left",
+      },
+      binding:
+        "FROM\n{{company.name}}\n{{company.address}}\nABN: {{company.abn}}\n{{company.phone}}",
+      editable: true,
+    },
+    {
+      id: "parties-divider",
+      type: "decorative",
+      label: "Parties divider",
+      bounds: { x: m.left, y: 268, width: 515, height: 2 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 1,
+        fontWeight: "normal",
+        color: "#111111",
+        align: "left",
+        borderColor: "#111111",
+        borderWidth: 1,
+      },
+      binding: "",
+      editable: false,
+    },
+    {
+      id: "line-items",
+      type: "table",
+      label: "Line items",
+      bounds: { x: m.left, y: 288, width: 515, height: 280 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 10,
+        fontWeight: "normal",
+        color: "#111111",
+        align: "left",
+        borderColor: "#111111",
+        borderWidth: 1,
+        background: "#111111",
+      },
+      binding: "{{items}}",
+      editable: true,
+    },
+    {
+      id: "payment",
+      type: "payment",
+      label: "Payment details",
+      bounds: { x: m.left, y: 600, width: 260, height: 110 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 10,
+        fontWeight: "normal",
+        color: "#333333",
+        align: "left",
+      },
+      binding: "PAYMENT DETAILS\n{{payment.instructions}}",
+      editable: true,
+    },
+    {
+      id: "totals",
+      type: "totals",
+      label: "Totals",
+      bounds: { x: 330, y: 600, width: 225, height: 120 },
+      style: {
+        fontFamily: "Helvetica-Bold",
+        fontSize: 28,
+        fontWeight: "bold",
+        color: analysis.primaryColor || "#0F2D26",
+        align: "right",
+      },
+      binding: "Subtotal: {{subtotal}}\nGST: {{tax}}\nTOTAL INC GST: {{total}}",
+      editable: true,
+    },
+    {
+      id: "footer",
+      type: "footer",
+      label: "Handwritten thank-you",
+      bounds: { x: m.left, y: 760, width: 515, height: 40 },
+      style: {
+        fontFamily: "Times-Italic",
+        fontSize: 28,
+        fontWeight: "normal",
+        color: analysis.primaryColor || "#0F2D26",
+        align: "center",
+      },
+      binding: "{{footer}}",
+      editable: true,
+    },
+  ];
+}
+
+function buildGenericRegions(
+  analysis: InvoiceAnalysis,
+  mode: InvoiceRecreationMode,
+): TemplateRegion[] {
   const margins = analysis.margins;
-  // Layout adjustments by mode (same identity; Advance opens spacing + hierarchy).
   const gap = mode === "advance" ? 18 : mode === "refine" ? 14 : 10;
   const titleSize = mode === "advance" ? 20 : mode === "refine" ? 18 : 16;
   const metaY = 48;
@@ -285,11 +477,90 @@ export function buildInvoiceTemplate(
       editable: true,
     });
   }
+  return regions;
+}
 
-  const headers =
-    analysis.tableHeaders.length >= 3
+/** Build editable regional template from analysis — not a flattened image. */
+export function buildInvoiceTemplate(
+  analysis: InvoiceAnalysis,
+  mode: InvoiceRecreationMode = "refine",
+): InvoiceTemplate {
+  const quantum = isQuantumHireLayout(analysis);
+  const regions = quantum
+    ? buildQuantumHireRegions(analysis, mode)
+    : buildGenericRegions(analysis, mode);
+
+  const headers = quantum
+    ? analysis.tableHeaders.length >= 5
+      ? analysis.tableHeaders
+      : ["Date", "Description", "Quantity", "Rate", "Amount excl GST"]
+    : analysis.tableHeaders.length >= 3
       ? analysis.tableHeaders
       : ["Description", "Qty", "Unit", "Tax", "Total"];
+
+  const columns = quantum
+    ? [
+        { id: "date", header: headers[0] || "Date", binding: "date", width: 70, align: "left" as const },
+        {
+          id: "description",
+          header: headers[1] || "Description",
+          binding: "description",
+          width: 220,
+          align: "left" as const,
+        },
+        {
+          id: "quantity",
+          header: headers[2] || "Quantity",
+          binding: "quantity",
+          width: 65,
+          align: "right" as const,
+        },
+        {
+          id: "unitPrice",
+          header: headers[3] || "Rate",
+          binding: "unitPrice",
+          width: 65,
+          align: "right" as const,
+        },
+        {
+          id: "total",
+          header: headers[4] || "Amount excl GST",
+          binding: "lineSubtotal",
+          width: 95,
+          align: "right" as const,
+        },
+      ]
+    : [
+        {
+          id: "description",
+          header: headers[0] || "Description",
+          binding: "description",
+          width: 220,
+          align: "left" as const,
+        },
+        {
+          id: "quantity",
+          header: headers[1] || "Qty",
+          binding: "quantity",
+          width: 50,
+          align: "right" as const,
+        },
+        {
+          id: "unitPrice",
+          header: headers[2] || "Unit",
+          binding: "unitPrice",
+          width: 70,
+          align: "right" as const,
+        },
+        { id: "tax", header: headers[3] || "Tax", binding: "tax", width: 60, align: "right" as const },
+        {
+          id: "total",
+          header: headers[4] || "Total",
+          binding: "total",
+          width: 70,
+          align: "right" as const,
+        },
+      ];
 
   return invoiceTemplateSchema.parse({
     format: INVOICE_TEMPLATE_FORMAT,
@@ -299,28 +570,26 @@ export function buildInvoiceTemplate(
       orientation: analysis.orientation,
       widthPt: analysis.pageSize === "Letter" ? 612 : 595.28,
       heightPt: analysis.pageSize === "Letter" ? 792 : 841.89,
-      margins,
+      margins: analysis.margins,
     },
     theme: modeTheme(analysis, mode),
     regions,
     table: {
       regionId: "line-items",
-      columns: [
-        { id: "description", header: headers[0] || "Description", binding: "description", width: 220, align: "left" },
-        { id: "quantity", header: headers[1] || "Qty", binding: "quantity", width: 50, align: "right" },
-        { id: "unitPrice", header: headers[2] || "Unit", binding: "unitPrice", width: 70, align: "right" },
-        { id: "tax", header: headers[3] || "Tax", binding: "tax", width: 60, align: "right" },
-        { id: "total", header: headers[4] || "Total", binding: "total", width: 70, align: "right" },
-      ],
-      headerBackground: mode === "advance" ? "#EEF2F7" : "#F3F4F6",
-      rowBorderColor: analysis.borderColor || "#E5E7EB",
+      columns,
+      headerBackground: quantum ? "#111111" : mode === "advance" ? "#EEF2F7" : "#F3F4F6",
+      headerTextColor: quantum ? "#FFFFFF" : "#111827",
+      rowBorderColor: quantum ? "#111111" : analysis.borderColor || "#E5E7EB",
     },
-    variables: [...DEFAULT_VARIABLES],
+    variables: [...DEFAULT_VARIABLES, "{{footer}}"],
     sampleData: sampleFromAnalysis(analysis),
     sourceMode: mode,
+    layoutProfile: quantum ? "quantum-hire" : "generic",
     analysis: {
       summary: analysis.summary,
       confidence: analysis.confidence,
+      layoutProfile: quantum ? "quantum-hire" : "generic",
+      footer: analysis.footer || (quantum ? "Thank you" : ""),
       detectedFields: [
         "company",
         "customer",
@@ -349,6 +618,20 @@ function formatMoney(n: number): string {
   return n.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function cellValue(
+  item: InvoiceSampleData["items"][number],
+  binding: string,
+): string {
+  if (binding === "date") return item.date || "";
+  if (binding === "description") return item.description;
+  if (binding === "quantity") return String(item.quantity);
+  if (binding === "unitPrice") return formatMoney(item.unitPrice);
+  if (binding === "tax") return formatMoney(item.tax);
+  if (binding === "lineSubtotal") return formatMoney(item.quantity * item.unitPrice);
+  if (binding === "total") return formatMoney(item.total);
+  return "";
+}
+
 /** Full-page HTML preview with data-region attributes for editing. */
 export function renderInvoiceHtml(
   template: InvoiceTemplate,
@@ -357,19 +640,135 @@ export function renderInvoiceHtml(
   const t = template.theme;
   const pageW = template.page.widthPt;
   const pageH = template.page.heightPt;
+  const quantum = template.layoutProfile === "quantum-hire";
+  const footerText =
+    (typeof template.analysis?.footer === "string" && template.analysis.footer) ||
+    (quantum ? "Thank you" : `${data.company.name} · Thank you for your business`);
 
   const rows = data.items
-    .map(
-      (item) => `
-      <tr>
-        <td>${escapeHtml(item.description)}</td>
-        <td class="num">${item.quantity}</td>
-        <td class="num">${formatMoney(item.unitPrice)}</td>
-        <td class="num">${formatMoney(item.tax)}</td>
-        <td class="num">${formatMoney(item.total)}</td>
-      </tr>`,
-    )
+    .map((item) => {
+      const cells = template.table.columns
+        .map((c) => {
+          const cls = c.align === "right" ? "num" : "";
+          return `<td class="${cls}">${escapeHtml(cellValue(item, c.binding))}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
     .join("");
+
+  if (quantum) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>${escapeHtml(data.invoice.title)} ${escapeHtml(data.invoice.number)}</title>
+<style>
+  @page { size: ${template.page.size} ${template.page.orientation}; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #d9ddd9; font-family: "IBM Plex Sans", Helvetica, sans-serif; color: ${t.textColor}; }
+  .page {
+    width: ${pageW}pt; min-height: ${pageH}pt; margin: 24px auto; background: ${t.backgroundColor};
+    padding: ${template.page.margins.top}pt ${template.page.margins.right}pt ${template.page.margins.bottom}pt ${template.page.margins.left}pt;
+    position: relative; box-shadow: 0 12px 40px rgba(15,42,37,0.14);
+  }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .qh-mark {
+    width: 110px; height: 56px; background: ${t.primaryColor}; color: ${t.secondaryColor};
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 28px; letter-spacing: 0.04em;
+  }
+  .qh-mark img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .title-block { text-align: right; }
+  .title-block h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: 0.04em; }
+  .title-block .meta { font-size: 10px; line-height: 1.55; color: #333; white-space: pre-line; }
+  .rule { border: 0; border-top: 1.25px solid #111; margin: 18px 0; }
+  .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .section-label { font-size: 11px; font-weight: 700; margin: 0 0 6px; letter-spacing: 0.06em; }
+  .party-name { font-size: 12px; font-weight: 700; color: ${t.primaryColor}; margin: 0 0 4px; }
+  .muted { color: #333; font-size: 11px; line-height: 1.45; white-space: pre-line; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 8px; }
+  table.items th {
+    background: ${template.table.headerBackground}; color: ${template.table.headerTextColor};
+    text-align: left; padding: 9px 6px; font-weight: 700;
+  }
+  table.items th.num, table.items td.num { text-align: right; }
+  table.items td { padding: 9px 6px; border-bottom: 1px solid #111; vertical-align: top; }
+  .bottom { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; margin-top: 28px; }
+  .totals { text-align: right; }
+  .totals .row { display: flex; justify-content: flex-end; gap: 24px; font-size: 11px; margin-bottom: 6px; }
+  .totals .grand { font-size: 28px; font-weight: 700; color: ${t.primaryColor}; margin-top: 10px; line-height: 1; }
+  .totals .grand-label { font-size: 10px; color: #666; margin-top: 4px; }
+  .thankyou {
+    margin-top: 36px; text-align: center; font-family: "Times New Roman", Times, serif;
+    font-style: italic; font-size: 28px; color: ${t.primaryColor};
+  }
+  .mode-tag { position: absolute; top: 10px; left: 10px; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+</style>
+</head>
+<body>
+  <article class="page" data-template-format="${template.format}" data-source-mode="${template.sourceMode}" data-layout="quantum-hire">
+    <div class="mode-tag">${escapeHtml(template.sourceMode)} recreation</div>
+    <div class="top">
+      <div data-region="logo" data-binding="{{company.logo}}" class="qh-mark">
+        ${data.company.logo ? `<img alt="QH" src="${escapeHtml(data.company.logo)}"/>` : "QH"}
+      </div>
+      <div class="title-block" data-region="title">
+        <h1>${escapeHtml(data.invoice.title)}</h1>
+        <div class="meta" data-region="invoice-meta">Invoice #: ${escapeHtml(data.invoice.number)}
+Invoice Date: ${escapeHtml(data.invoice.issueDate)}
+Due Date: ${escapeHtml(data.invoice.dueDate)}
+Terms: ${escapeHtml(data.terms || "14 days")}</div>
+      </div>
+    </div>
+    <hr class="rule" data-region="header-divider"/>
+    <div class="parties">
+      <div data-region="customer">
+        <p class="section-label">BILL TO</p>
+        <p class="party-name">${escapeHtml(data.customer.name)}</p>
+        <div class="muted">${escapeHtml(data.customer.address)}
+${escapeHtml(data.customer.email)}</div>
+      </div>
+      <div data-region="company">
+        <p class="section-label">FROM</p>
+        <p class="party-name">${escapeHtml(data.company.name)}</p>
+        <div class="muted">${escapeHtml(data.company.address)}
+ABN: ${escapeHtml(data.company.abn)}
+${escapeHtml(data.company.phone)}</div>
+      </div>
+    </div>
+    <hr class="rule" data-region="parties-divider"/>
+    <div data-region="table" data-binding="{{items}}">
+      <table class="items">
+        <thead>
+          <tr>
+            ${template.table.columns
+              .map(
+                (c) =>
+                  `<th class="${c.align === "right" ? "num" : ""}">${escapeHtml(c.header)}</th>`,
+              )
+              .join("")}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="bottom">
+      <div data-region="payment">
+        <p class="section-label">PAYMENT DETAILS</p>
+        <div class="muted">${escapeHtml(data.payment.instructions || "—")}</div>
+      </div>
+      <div class="totals" data-region="totals">
+        <div class="row"><span>Subtotal</span><span>$${formatMoney(data.subtotal)}</span></div>
+        <div class="row"><span>GST (10%)</span><span>$${formatMoney(data.tax)}</span></div>
+        <div class="grand">$${formatMoney(data.total)}</div>
+        <div class="grand-label">TOTAL INC GST</div>
+      </div>
+    </div>
+    <div class="thankyou" data-region="footer">${escapeHtml(footerText)}</div>
+  </article>
+</body>
+</html>`;
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -465,7 +864,7 @@ ${data.discount ? `Discount: ${formatMoney(data.discount)}\n` : ""}<strong>Total
 ${escapeHtml(data.terms)}</div>
     </div>
     <div data-region="footer" class="footer" style="left:0;top:760pt;width:500pt;">
-      ${escapeHtml(data.company.name)} · Thank you for your business
+      ${escapeHtml(footerText)}
     </div>
   </article>
 </body>

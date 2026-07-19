@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { analyseInvoiceFromText } from "@/lib/invoice/analyse-invoice";
+import {
+  buildCartNTip107Pdf,
+  cartNTip107Analysis,
+  cartNTip107PlainText,
+  renderCartNTip107Png,
+} from "@/lib/invoice/cart-n-tip-fixture";
 import { buildInvoiceTemplatePackage } from "@/lib/invoice/export-package";
 import {
   northwindInvoiceAnalysis,
@@ -58,3 +64,40 @@ describe("invoice analysis + recreation", () => {
     expect(png.length).toBeGreaterThan(5000);
   });
 });
+
+describe("Cart N Tip #107 Quantum Hire acceptance layout", () => {
+  it("detects quantum-hire layout from Cart N Tip text", () => {
+    const analysis = analyseInvoiceFromText(cartNTip107PlainText());
+    expect(analysis.layoutProfile).toBe("quantum-hire");
+    expect(analysis.customerName).toMatch(/Cart N Tip/i);
+    expect(analysis.invoiceNumber).toMatch(/107/);
+  });
+
+  it("builds Mirror template with QH structure", () => {
+    const template = buildInvoiceTemplate(cartNTip107Analysis(), "mirror");
+    expect(template.layoutProfile).toBe("quantum-hire");
+    expect(template.table.headerBackground.toLowerCase()).toBe("#111111");
+    expect(template.table.columns.map((c) => c.header)).toEqual([
+      "Date",
+      "Description",
+      "Quantity",
+      "Rate",
+      "Amount excl GST",
+    ]);
+    expect(template.regions.some((r) => r.label === "From" || r.id === "company")).toBe(true);
+    const html = renderInvoiceHtml(template);
+    expect(html).toContain("BILL TO");
+    expect(html).toContain("FROM");
+    expect(html).toContain("Thank you");
+    expect(html).toContain("2,310.00");
+    expect(html).toContain("PAYMENT DETAILS");
+  });
+
+  it("builds a real PDF fixture for /invoices upload", async () => {
+    const pdf = await buildCartNTip107Pdf();
+    expect(pdf.subarray(0, 4).toString("utf8")).toBe("%PDF");
+    const png = await renderCartNTip107Png();
+    expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+  });
+});
+

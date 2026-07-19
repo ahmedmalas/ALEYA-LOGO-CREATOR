@@ -28,7 +28,9 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
 
   const invoiceNumber =
     find(/invoice\s*(?:number|#|no\.?)\s*[:#]?\s*([A-Z0-9/-]+)/i) ||
-    find(/\b(INV[-/]?\d{3,})\b/i);
+    find(/\binvoice\s*#\s*[:#]?\s*([A-Z0-9/-]+)/i) ||
+    find(/\b(INV[-/]?\d{3,})\b/i) ||
+    find(/\b#\s*(\d{2,6})\b/);
   const issueDate =
     find(/(?:issue|invoice)\s*date\s*[:#]?\s*([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})/i) ||
     find(/\b(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/);
@@ -45,18 +47,20 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
   );
   const discount = money(find(/discount\s*[:$]?\s*\$?\s*([0-9,]+\.\d{2})/i));
 
-  // Line items: "Description  qty  price  total" heuristic rows
+  // Line items: optional date + "Description  qty  price  total" heuristic rows
   const items: InvoiceAnalysis["items"] = [];
   const itemRe =
-    /^(.{8,80}?)\s+(\d+(?:\.\d+)?)\s+\$?([0-9,]+\.\d{2})\s+\$?([0-9,]+\.\d{2})$/;
+    /^(?:(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+)?(.{6,80}?)\s+(\d+(?:\.\d+)?)\s+\$?([0-9,]+\.\d{2})\s+\$?([0-9,]+\.\d{2})$/;
   for (const line of lines) {
     const m = line.match(itemRe);
     if (!m) continue;
-    const description = m[1]!.trim();
-    if (/^(description|item|qty|quantity|unit|total|subtotal)/i.test(description)) continue;
-    const quantity = Number(m[2]);
-    const unitPrice = money(m[3]);
-    const lineTotal = money(m[4]);
+    const date = m[1]?.trim();
+    const description = m[2]!.trim();
+    if (/^(description|item|qty|quantity|unit|total|subtotal|date|rate|amount)/i.test(description))
+      continue;
+    const quantity = Number(m[3]);
+    const unitPrice = money(m[4]);
+    const lineTotal = money(m[5]);
     items.push({
       description,
       quantity,
@@ -64,6 +68,7 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
       tax: 0,
       discount: 0,
       total: lineTotal || quantity * unitPrice,
+      ...(date ? { date } : {}),
     });
   }
 
@@ -82,13 +87,15 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
   const abn = find(/\bABN[:\s]*([0-9\s]{8,14})/i);
 
   const billIdx = lines.findIndex((l) => /bill\s*to|customer|client/i.test(l));
+  const fromIdx = lines.findIndex((l) => /^from\b/i.test(l));
   const customerName = billIdx >= 0 ? lines[billIdx + 1] || "" : "";
   const customerAddress =
     billIdx >= 0 ? lines.slice(billIdx + 2, billIdx + 5).join(", ") : "";
+  const fromName = fromIdx >= 0 ? lines[fromIdx + 1] || "" : "";
 
   const paymentIdx = lines.findIndex((l) => /payment|bank|bsb|account/i.test(l));
   const paymentInstructions =
-    paymentIdx >= 0 ? lines.slice(paymentIdx, paymentIdx + 4).join("\n") : "";
+    paymentIdx >= 0 ? lines.slice(paymentIdx, paymentIdx + 5).join("\n") : "";
 
   const notesIdx = lines.findIndex((l) => /^notes?\b/i.test(l));
   const notes = notesIdx >= 0 ? lines.slice(notesIdx + 1, notesIdx + 3).join(" ") : "";
@@ -101,21 +108,32 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
   const computedTax = tax || Math.round(computedSubtotal * 0.1 * 100) / 100;
   const computedTotal = total || computedSubtotal + computedTax - discount;
 
+  const quantum =
+    /quantum\s*hire/i.test(joined) ||
+    /cart\s*n\s*tip/i.test(joined) ||
+    (/amount\s*excl/i.test(joined) && /\bbill\s*to\b/i.test(joined) && /\bfrom\b/i.test(joined));
+
+  const resolvedCompany = quantum
+    ? fromName || companyName || "Quantum Hire"
+    : companyName;
+
   return invoiceAnalysisSchema.parse({
     pageSize: "A4",
     orientation: "portrait",
-    margins: { top: 48, right: 48, bottom: 48, left: 48 },
+    margins: quantum
+      ? { top: 40, right: 40, bottom: 40, left: 40 }
+      : { top: 48, right: 48, bottom: 48, left: 48 },
     backgroundColor: "#FFFFFF",
-    primaryColor: "#1F4D45",
-    secondaryColor: "#B08A4F",
+    primaryColor: quantum ? "#0F2D26" : "#1F4D45",
+    secondaryColor: quantum ? "#C4A35A" : "#B08A4F",
     textColor: "#111827",
-    borderColor: "#D1D5DB",
-    companyName,
+    borderColor: quantum ? "#111111" : "#D1D5DB",
+    companyName: resolvedCompany,
     companyAddress: lines.slice(1, 3).join(", "),
     companyEmail: email,
     companyPhone: phone,
     companyAbn: abn,
-    hasLogo: /logo/i.test(joined),
+    hasLogo: /logo|\bqh\b/i.test(joined) || quantum,
     invoiceTitle: /tax\s*invoice/i.test(joined) ? "TAX INVOICE" : "INVOICE",
     invoiceNumber: invoiceNumber || "INV-001",
     issueDate: issueDate || new Date().toISOString().slice(0, 10),
@@ -123,7 +141,9 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
     customerName,
     customerAddress,
     customerEmail: "",
-    tableHeaders: ["Description", "Qty", "Unit", "Tax", "Total"],
+    tableHeaders: quantum
+      ? ["Date", "Description", "Quantity", "Rate", "Amount excl GST"]
+      : ["Description", "Qty", "Unit", "Tax", "Total"],
     items:
       items.length > 0
         ? items
@@ -145,8 +165,9 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
     bankDetails: paymentInstructions,
     notes,
     terms,
-    footer: companyName ? `Generated for ${companyName}` : "",
-    typography: "sans-serif",
+    footer: quantum ? "Thank you" : companyName ? `Generated for ${companyName}` : "",
+    typography: quantum ? "quantum-hire" : "sans-serif",
+    layoutProfile: quantum ? "quantum-hire" : "generic",
     confidence: invoiceNumber || items.length ? 0.72 : 0.45,
     summary: `Invoice ${invoiceNumber || "draft"} for ${customerName || "customer"} — total ${computedTotal.toFixed(2)}`,
     rawTextExcerpt: lines.slice(0, 40).join("\n"),

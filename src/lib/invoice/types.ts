@@ -70,6 +70,7 @@ export const invoiceLineItemSchema = z.object({
   tax: z.number().default(0),
   discount: z.number().default(0),
   total: z.number(),
+  date: z.string().optional(),
 });
 
 export const invoiceSampleDataSchema = z.object({
@@ -140,11 +141,13 @@ export const invoiceTemplateSchema = z.object({
     regionId: z.string().default("line-items"),
     columns: z.array(tableColumnSchema),
     headerBackground: z.string().default("#F3F4F6"),
+    headerTextColor: z.string().default("#111827"),
     rowBorderColor: z.string().default("#E5E7EB"),
   }),
   variables: z.array(z.string()),
   sampleData: invoiceSampleDataSchema,
   sourceMode: z.enum(invoiceRecreationModes),
+  layoutProfile: z.enum(["generic", "quantum-hire"]).default("generic"),
   analysis: z.record(z.string(), z.unknown()).optional(),
   assets: z
     .object({
@@ -202,6 +205,7 @@ export const invoiceAnalysisSchema = z.object({
   terms: z.string().default(""),
   footer: z.string().default(""),
   typography: z.string().default("sans-serif"),
+  layoutProfile: z.enum(["generic", "quantum-hire"]).default("generic"),
   confidence: z.number().min(0).max(1).default(0.5),
   summary: z.string().default(""),
   rawTextExcerpt: z.string().default(""),
