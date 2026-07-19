@@ -1,6 +1,7 @@
 "use client";
 
 import { PasswordField } from "@/components/auth/password-field";
+import { BrandHomeLink } from "@/components/brand-home-link";
 import { useEmailActionCooldown } from "@/hooks/use-email-action-cooldown";
 import {
   getCooldownRemainingMs,
@@ -130,9 +131,9 @@ function SignupForm() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
       <div className="panel animate-rise rounded-3xl p-8 shadow-sm">
-        <Link href="/" className="brand text-3xl text-[var(--forest-deep)]">
+        <BrandHomeLink className="brand text-3xl text-[var(--forest-deep)]">
           ALEYA
-        </Link>
+        </BrandHomeLink>
         <h1 className="mt-2 text-xl">Create your Logo Creator account</h1>
         {proWaitlist ? (
           <p className="mt-2 text-sm text-black/60" role="status">

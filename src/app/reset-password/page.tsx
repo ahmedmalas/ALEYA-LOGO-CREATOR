@@ -1,6 +1,7 @@
 "use client";
 
 import { PasswordField } from "@/components/auth/password-field";
+import { BrandHomeLink } from "@/components/brand-home-link";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,12 +15,34 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient();
+    let settled = false;
     void supabase.auth.getSession().then(({ data }) => {
+      settled = true;
       setReady(Boolean(data.session));
       if (!data.session) {
         setError("Open the reset link from your email to continue.");
       }
     });
+    // Wait for auth hydration (INITIAL_SESSION) before treating missing session as failure.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION" || event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
+        settled = true;
+        setReady(Boolean(session));
+        if (session) setError(null);
+      }
+    });
+    const timeout = window.setTimeout(() => {
+      if (!settled) {
+        setReady(false);
+        setError("Open the reset link from your email to continue.");
+      }
+    }, 2500);
+    return () => {
+      subscription.unsubscribe();
+      window.clearTimeout(timeout);
+    };
   }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -53,9 +76,9 @@ export default function ResetPasswordPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
       <div className="panel animate-rise rounded-3xl p-8 shadow-sm">
-        <Link href="/" className="brand text-3xl text-[var(--forest-deep)]">
+        <BrandHomeLink className="brand text-3xl text-[var(--forest-deep)]">
           ALEYA
-        </Link>
+        </BrandHomeLink>
         <h1 className="mt-2 text-xl">Choose a new password</h1>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <PasswordField

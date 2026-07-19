@@ -23,6 +23,8 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
+  // Always call getUser() so the session cookie is refreshed before route guards run.
+  // Never treat a missing user as a reason to clear cookies — only /auth/signout signs out.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -45,6 +47,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/health") ||
     path.startsWith("/api/integrate/validate");
 
+  // Public routes (including /) must not clear or rewrite auth state.
+  // Protected routes redirect only after getUser() has completed above.
   if (!user && !isPublic) {
     if (path.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
