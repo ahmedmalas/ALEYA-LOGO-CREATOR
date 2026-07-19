@@ -50,7 +50,11 @@ export default function GalleryPage() {
                 <p className="text-xs uppercase tracking-wide text-black/55">
                   {sample.industry} · {sample.style} · {sample.layout}
                 </p>
-                <div className="flex gap-2 pt-1" aria-label={`Palette ${sample.primary}, ${sample.secondary}`}>
+                <div
+                  className="flex gap-2 pt-1"
+                  role="group"
+                  aria-label={`Palette ${sample.primary}, ${sample.secondary}`}
+                >
                   {[sample.primary, sample.secondary].map((color) => (
                     <span
                       key={color}

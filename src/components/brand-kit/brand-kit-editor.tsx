@@ -136,6 +136,7 @@ export function BrandKitEditor({
             <p className="mb-2 text-sm font-medium">Primary colours</p>
             <div
               className="flex flex-wrap gap-2"
+              role="group"
               aria-label={`Primary colours ${kit.primary_colors.join(", ")}`}
             >
               {kit.primary_colors.map((c) => (
