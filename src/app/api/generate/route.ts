@@ -54,6 +54,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error && typeof error === "object" && "issues" in error) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
     const status =
       error instanceof ProviderError
         ? error.code === "rate_limited"
@@ -63,10 +66,21 @@ export async function POST(request: Request) {
             : 502
         : (error as { status?: number }).status === 429
           ? 429
-          : 400;
+          : 500;
+    const message =
+      error instanceof ProviderError
+        ? error.message
+        : (error as { status?: number }).status === 429
+          ? error instanceof Error
+            ? error.message
+            : "Rate limit exceeded"
+          : "Generation failed. Please try again.";
+    if (!(error instanceof ProviderError) && (error as { status?: number }).status !== 429) {
+      console.error("[generate]", error);
+    }
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Generation failed",
+        error: message,
         code: error instanceof ProviderError ? error.code : undefined,
       },
       { status },

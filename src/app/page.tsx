@@ -38,11 +38,8 @@ export default function HomePage() {
         />
         <SiteHeader tone="dark" />
         <section className="mx-auto flex min-h-[calc(100svh-5rem)] w-full max-w-6xl flex-col justify-end px-4 pb-16 pt-10 md:px-8">
-          <p className="brand animate-rise text-5xl text-[#f6f0e4] md:text-7xl">ALEYA</p>
-          <h1
-            className="mt-3 max-w-xl animate-rise text-2xl font-medium text-[#f6f0e4] md:text-3xl"
-            style={{ animationDelay: "80ms" }}
-          >
+          <p className="brand text-5xl text-[#f6f0e4] md:text-7xl">ALEYA</p>
+          <h1 className="mt-3 max-w-xl text-2xl font-medium text-[#f6f0e4] md:text-3xl">
             Logo Creator
           </h1>
           <p
@@ -55,10 +52,10 @@ export default function HomePage() {
             className="mt-8 flex flex-wrap gap-3 animate-rise"
             style={{ animationDelay: "200ms" }}
           >
-            <Link href="/signup" className="btn btn-primary">
+            <Link href="/signup" className="btn btn-on-dark-primary">
               Get Started
             </Link>
-            <Link href="/login" className="btn btn-secondary border-[#f6f0e4] text-[#f6f0e4]">
+            <Link href="/login" className="btn btn-on-dark">
               Sign In
             </Link>
           </div>
@@ -121,7 +118,7 @@ export default function HomePage() {
                   <SampleLogo sample={sample} />
                   <figcaption className="space-y-1 p-4">
                     <p className="font-medium">{sample.businessName}</p>
-                    <p className="text-xs uppercase tracking-wide text-black/45">
+                    <p className="text-xs uppercase tracking-wide text-black/55">
                       {sample.industry} · {sample.style}
                     </p>
                   </figcaption>
@@ -139,7 +136,7 @@ export default function HomePage() {
           </p>
           <div className="mt-10 grid gap-6 md:grid-cols-2">
             <div className="panel rounded-3xl p-6">
-              <p className="text-sm uppercase tracking-wide text-black/45">Included</p>
+              <p className="text-sm uppercase tracking-wide text-black/55">Included</p>
               <ul className="mt-4 space-y-3 text-sm text-black/70">
                 <li>Primary, secondary, and icon marks</li>
                 <li>Primary and secondary colour palettes</li>
@@ -206,7 +203,7 @@ export default function HomePage() {
                   <h3 className="text-2xl">{plan.name}</h3>
                   <p className="text-2xl font-semibold text-[var(--forest-deep)]">
                     {plan.priceLabel}
-                    <span className="ml-2 text-sm font-normal text-black/45">{plan.priceNote}</span>
+                    <span className="ml-2 text-sm font-normal text-black/55">{plan.priceNote}</span>
                   </p>
                 </div>
                 <p className="mt-3 text-sm text-black/60">{plan.description}</p>
@@ -216,7 +213,10 @@ export default function HomePage() {
                 <p className="mt-1 text-sm">
                   <span className="font-medium">Exports:</span> {plan.exportLimit}
                 </p>
-                <Link href={plan.cta.href} className="btn btn-primary mt-6">
+                <Link
+                  href={plan.cta.href}
+                  className={`btn mt-6 ${plan.highlighted ? "btn-primary" : "btn-secondary"}`}
+                >
                   {plan.cta.label}
                 </Link>
               </article>
@@ -234,13 +234,10 @@ export default function HomePage() {
               Open a project, generate concepts, and leave with a Brand Kit you can reopen anytime.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/signup" className="btn bg-[#f6f0e4] text-[var(--forest-deep)]">
+              <Link href="/signup" className="btn btn-on-dark-primary">
                 Get Started
               </Link>
-              <Link
-                href="/gallery"
-                className="btn border border-[#f6f0e4] bg-transparent text-[#f6f0e4] hover:bg-[rgba(246,240,228,0.08)]"
-              >
+              <Link href="/gallery" className="btn btn-on-dark">
                 Browse examples
               </Link>
             </div>

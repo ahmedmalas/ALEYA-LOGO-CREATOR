@@ -5,11 +5,15 @@ import "./globals.css";
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 });
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aleya-logo-creator.vercel.app";
@@ -71,14 +75,14 @@ const jsonLd = {
       name: "Free",
       price: "0",
       priceCurrency: "USD",
-      description: "20 logo generations per hour, 3 Brand Kit ZIP downloads per day",
+      description: "20 logo generations per hour with SVG and PNG Brand Kit exports",
     },
     {
       "@type": "Offer",
       name: "Pro",
       price: "29",
       priceCurrency: "USD",
-      description: "200 logo generations per hour, unlimited Brand Kit ZIP downloads",
+      description: "Waitlist for higher generation throughput and priority queue",
     },
   ],
 };

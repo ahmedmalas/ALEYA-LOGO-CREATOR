@@ -1,6 +1,7 @@
 "use client";
 
 import { verifyClientLaunchParams } from "@/lib/integration/client-launch";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -33,7 +34,7 @@ function IntegrateInner() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (!cancelled) setError(json.error ?? "Invalid integration link");
           return;
@@ -45,7 +46,7 @@ function IntegrateInner() {
         });
         router.replace(`/projects/new?${qs.toString()}`);
       } catch {
-        if (!cancelled) setError("Could not validate integration link");
+        if (!cancelled) setError("Could not validate integration link. Check your connection.");
       }
     }
 
@@ -58,12 +59,26 @@ function IntegrateInner() {
   return (
     <div className="mx-auto flex min-h-screen max-w-lg items-center px-4">
       <div className="panel w-full rounded-3xl p-8">
-        <p className="brand text-3xl text-[var(--forest-deep)]">ALEYA</p>
+        <Link href="/" className="brand text-3xl text-[var(--forest-deep)]">
+          ALEYA
+        </Link>
         <h1 className="mt-2 text-xl">Opening Logo Creator…</h1>
         {error ? (
-          <p className="mt-4 text-[var(--danger)]">{error}</p>
+          <div className="mt-4 space-y-3">
+            <p className="text-[var(--danger)]" role="alert">
+              {error}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/login" className="btn btn-primary">
+                Sign in
+              </Link>
+              <Link href="/" className="btn btn-secondary">
+                Go home
+              </Link>
+            </div>
+          </div>
         ) : (
-          <p className="mt-4 animate-pulse-soft text-black/60">
+          <p className="mt-4 animate-pulse-soft text-black/60" role="status">
             Validating secure handoff from Aleya Invoicing.
           </p>
         )}
@@ -74,7 +89,7 @@ function IntegrateInner() {
 
 export default function IntegratePage() {
   return (
-    <Suspense>
+    <Suspense fallback={<div className="p-8 text-center text-black/60">Opening Logo Creator…</div>}>
       <IntegrateInner />
     </Suspense>
   );

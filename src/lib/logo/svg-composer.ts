@@ -1,3 +1,4 @@
+import { sanitizeHexColor } from "@/lib/security/colors";
 import type {
   ConceptPalette,
   GeneratedConcept,
@@ -27,7 +28,7 @@ function hashSeed(input: string): number {
 
 function pickColor(preferred: string[], fallback: string, index: number): string {
   if (preferred.length === 0) return fallback;
-  return preferred[index % preferred.length]!;
+  return sanitizeHexColor(preferred[index % preferred.length]!, fallback);
 }
 
 function buildPalette(brief: LogoBrief, variant: number): ConceptPalette {
@@ -39,8 +40,13 @@ function buildPalette(brief: LogoBrief, variant: number): ConceptPalette {
     1,
   );
   const accent = pickColor(brief.preferredColors, defaults[(variant + 2) % defaults.length]!, 2);
-  const avoid = new Set(brief.avoidColors.map((c) => c.toLowerCase()));
-  const safe = (c: string, fb: string) => (avoid.has(c.toLowerCase()) ? fb : c);
+  const avoid = new Set(
+    brief.avoidColors.map((c) => sanitizeHexColor(c, "").toLowerCase()).filter(Boolean),
+  );
+  const safe = (c: string, fb: string) => {
+    const hex = sanitizeHexColor(c, fb);
+    return avoid.has(hex.toLowerCase()) ? fb : hex;
+  };
   return {
     primary: safe(primary, "#0F3D3E"),
     secondary: safe(secondary, "#C4A574"),
@@ -73,9 +79,9 @@ function iconPath(brief: LogoBrief, variant: number): string {
 function renderMark(palette: ConceptPalette, path: string, mono: string): string {
   return `
     <g transform="translate(40,40)">
-      <path d="${path}" fill="${palette.primary}" opacity="0.92"/>
-      <circle cx="60" cy="65" r="28" fill="${palette.secondary}" opacity="0.95"/>
-      <text x="60" y="74" text-anchor="middle" font-size="22" font-family="Georgia, serif" font-weight="700" fill="${palette.background}">${mono}</text>
+      <path d="${path}" fill="${escapeXml(palette.primary)}" opacity="0.92"/>
+      <circle cx="60" cy="65" r="28" fill="${escapeXml(palette.secondary)}" opacity="0.95"/>
+      <text x="60" y="74" text-anchor="middle" font-size="22" font-family="Georgia, serif" font-weight="700" fill="${escapeXml(palette.background)}">${escapeXml(mono)}</text>
     </g>`;
 }
 
@@ -91,36 +97,36 @@ function renderLayout(
 
   if (layout === "icon-top") {
     return `${mark}
-      <text x="256" y="220" text-anchor="middle" font-size="42" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${palette.foreground}">${escapeXml(name)}</text>
-      ${tag ? `<text x="256" y="255" text-anchor="middle" font-size="16" font-family="${fonts.body}, sans-serif" fill="${palette.accent}">${escapeXml(tag)}</text>` : ""}`;
+      <text x="256" y="220" text-anchor="middle" font-size="42" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${escapeXml(palette.foreground)}">${escapeXml(name)}</text>
+      ${tag ? `<text x="256" y="255" text-anchor="middle" font-size="16" font-family="${fonts.body}, sans-serif" fill="${escapeXml(palette.accent)}">${escapeXml(tag)}</text>` : ""}`;
   }
 
   if (layout === "wordmark") {
     return `
-      <text x="256" y="200" text-anchor="middle" font-size="48" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${palette.primary}">${escapeXml(name)}</text>
-      ${tag ? `<text x="256" y="235" text-anchor="middle" font-size="16" letter-spacing="4" font-family="${fonts.body}, sans-serif" fill="${palette.accent}">${escapeXml(tag.toUpperCase())}</text>` : ""}`;
+      <text x="256" y="200" text-anchor="middle" font-size="48" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${escapeXml(palette.primary)}">${escapeXml(name)}</text>
+      ${tag ? `<text x="256" y="235" text-anchor="middle" font-size="16" letter-spacing="4" font-family="${fonts.body}, sans-serif" fill="${escapeXml(palette.accent)}">${escapeXml(tag.toUpperCase())}</text>` : ""}`;
   }
 
   if (layout === "badge") {
     return `
-      <rect x="96" y="90" width="320" height="220" rx="24" fill="${palette.primary}"/>
+      <rect x="96" y="90" width="320" height="220" rx="24" fill="${escapeXml(palette.primary)}"/>
       <g transform="translate(116,-10) scale(0.7)">${mark}</g>
-      <text x="256" y="250" text-anchor="middle" font-size="28" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${palette.background}">${escapeXml(name)}</text>
-      ${tag ? `<text x="256" y="278" text-anchor="middle" font-size="13" font-family="${fonts.body}, sans-serif" fill="${palette.secondary}">${escapeXml(tag)}</text>` : ""}`;
+      <text x="256" y="250" text-anchor="middle" font-size="28" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${escapeXml(palette.background)}">${escapeXml(name)}</text>
+      ${tag ? `<text x="256" y="278" text-anchor="middle" font-size="13" font-family="${fonts.body}, sans-serif" fill="${escapeXml(palette.secondary)}">${escapeXml(tag)}</text>` : ""}`;
   }
 
   if (layout === "monogram") {
     return `
-      <circle cx="256" cy="180" r="110" fill="${palette.primary}"/>
-      <text x="256" y="198" text-anchor="middle" font-size="72" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${palette.background}">${escapeXml(monogram(name))}</text>
-      <text x="256" y="330" text-anchor="middle" font-size="22" font-family="${fonts.body}, sans-serif" fill="${palette.foreground}">${escapeXml(name)}</text>`;
+      <circle cx="256" cy="180" r="110" fill="${escapeXml(palette.primary)}"/>
+      <text x="256" y="198" text-anchor="middle" font-size="72" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${escapeXml(palette.background)}">${escapeXml(monogram(name))}</text>
+      <text x="256" y="330" text-anchor="middle" font-size="22" font-family="${fonts.body}, sans-serif" fill="${escapeXml(palette.foreground)}">${escapeXml(name)}</text>`;
   }
 
   // icon-left
   return `
     <g transform="translate(20,70) scale(0.85)">${mark}</g>
-    <text x="220" y="175" font-size="40" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${palette.foreground}">${escapeXml(name)}</text>
-    ${tag ? `<text x="220" y="210" font-size="16" font-family="${fonts.body}, sans-serif" fill="${palette.accent}">${escapeXml(tag)}</text>` : ""}`;
+    <text x="220" y="175" font-size="40" font-family="${fonts.display}, Georgia, serif" font-weight="700" fill="${escapeXml(palette.foreground)}">${escapeXml(name)}</text>
+    ${tag ? `<text x="220" y="210" font-size="16" font-family="${fonts.body}, sans-serif" fill="${escapeXml(palette.accent)}">${escapeXml(tag)}</text>` : ""}`;
 }
 
 function escapeXml(value: string): string {
@@ -218,18 +224,20 @@ export function composeRefinedConcept(
 }
 
 export function toMonochromeSvg(svg: string, color = "#111111"): string {
+  const safe = sanitizeHexColor(color, "#111111");
   return svg
-    .replace(/fill="#[0-9A-Fa-f]{3,8}"/g, `fill="${color}"`)
-    .replace(/fill='#[0-9A-Fa-f]{3,8}'/g, `fill='${color}'`);
+    .replace(/fill="#[0-9A-Fa-f]{3,8}"/g, `fill="${safe}"`)
+    .replace(/fill='#[0-9A-Fa-f]{3,8}'/g, `fill='${safe}'`);
 }
 
 export function wrapPreview(svgInnerOrFull: string, background: string): string {
+  const safeBg = sanitizeHexColor(background, "#F7F4EF");
   const inner = svgInnerOrFull.includes("<svg")
     ? svgInnerOrFull.replace(/^[\s\S]*?<svg[^>]*>/i, "").replace(/<\/svg>[\s\S]*$/i, "")
     : svgInnerOrFull;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="${background}"/>
+  <rect width="512" height="512" fill="${escapeXml(safeBg)}"/>
   ${inner}
 </svg>`;
 }

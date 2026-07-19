@@ -47,16 +47,21 @@ export default function GalleryPage() {
               <div className="space-y-2 p-5">
                 <h2 className="text-xl">{sample.businessName}</h2>
                 <p className="text-sm text-black/55">{sample.tagline}</p>
-                <p className="text-xs uppercase tracking-wide text-black/40">
+                <p className="text-xs uppercase tracking-wide text-black/55">
                   {sample.industry} · {sample.style} · {sample.layout}
                 </p>
-                <div className="flex gap-2 pt-1">
+                <div
+                  className="flex gap-2 pt-1"
+                  role="group"
+                  aria-label={`Palette ${sample.primary}, ${sample.secondary}`}
+                >
                   {[sample.primary, sample.secondary].map((color) => (
                     <span
                       key={color}
-                      className="h-5 w-5 rounded-full border border-black/10"
+                      className="h-8 w-8 rounded-full border border-black/10"
                       style={{ background: color }}
                       title={color}
+                      aria-hidden
                     />
                   ))}
                 </div>

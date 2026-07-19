@@ -17,8 +17,8 @@ export function SiteFooter() {
           <Link href="/login">Sign In</Link>
         </nav>
       </div>
-      <div className="border-t border-black/6 py-4 text-center text-xs text-black/40">
-        © {new Date().getFullYear()} ALEYA Logo Creator · v1.0
+      <div className="border-t border-black/6 py-4 text-center text-xs text-black/55">
+        © {new Date().getFullYear()} ALEYA Logo Creator · v1.0.0
       </div>
     </footer>
   );
