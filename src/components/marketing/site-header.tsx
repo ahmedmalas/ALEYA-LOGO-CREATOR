@@ -62,6 +62,13 @@ export async function SiteHeader({
               >
                 Create New Logo
               </Link>
+              <Link
+                href="/account/profile"
+                className={`min-h-10 inline-flex items-center px-1 ${navClass}`}
+                data-cta-label="Profile"
+              >
+                Profile
+              </Link>
             </>
           ) : null}
           <Link href="/gallery" className={`min-h-10 inline-flex items-center px-1 ${navClass}`}>

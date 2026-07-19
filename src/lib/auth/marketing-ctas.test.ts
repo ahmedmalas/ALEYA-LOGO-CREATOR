@@ -43,10 +43,19 @@ describe("marketing CTAs", () => {
   });
 
   it("plan CTAs for signed-in users avoid signup funnel labels", () => {
+    const freeOnFree = planCtaForAuth(PLANS[0], true, "free");
+    expect(freeOnFree.label).toBe("Current plan");
+    expect(freeOnFree.href).toBe("/account/plan");
+
+    const proWhileFree = planCtaForAuth(PLANS[1], true, "free");
+    expect(proWhileFree.href).toContain("/account/plan");
+    expect(proWhileFree.label).toMatch(/waitlist|Upgrade/i);
+    expect(FORBIDDEN_SIGNED_IN_CTA_LABELS as readonly string[]).not.toContain(proWhileFree.label);
+
     for (const plan of PLANS) {
-      const cta = planCtaForAuth(plan, true);
-      expect(cta.href).toBe("/projects/new");
-      expect(cta.label).toBe("Create New Logo");
+      const cta = planCtaForAuth(plan, true, "free");
+      expect(cta.href.startsWith("/signup")).toBe(false);
+      expect(cta.href.startsWith("/login")).toBe(false);
       expect(FORBIDDEN_SIGNED_IN_CTA_LABELS as readonly string[]).not.toContain(cta.label);
     }
   });

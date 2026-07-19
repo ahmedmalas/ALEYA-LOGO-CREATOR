@@ -64,10 +64,22 @@ export function footerAuthCtas(signedIn: boolean): MarketingCta[] {
   ];
 }
 
-export function planCtaForAuth(plan: Plan, signedIn: boolean): MarketingCta {
+export function planCtaForAuth(
+  plan: Plan,
+  signedIn: boolean,
+  currentPlanId: Plan["id"] = "free",
+): MarketingCta {
   if (!signedIn) return plan.cta;
-  // Never show Get Started / Sign In / Join waitlist signup funnel to signed-in users.
-  return { label: "Create New Logo", href: "/projects/new" };
+  if (plan.id === currentPlanId) {
+    return { label: "Current plan", href: "/account/plan" };
+  }
+  // Signed-in users never enter signup. Pro without billing → waitlist in account.
+  if (plan.id === "pro") {
+    return plan.definition.paidCheckoutAvailable
+      ? { label: "Upgrade to Pro", href: "/account/plan" }
+      : { label: "Join Pro waitlist", href: "/account/plan?waitlist=pro" };
+  }
+  return { label: "View plan usage", href: "/account/plan" };
 }
 
 /** Labels that must never appear for authenticated marketing surfaces. */

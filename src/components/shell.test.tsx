@@ -52,6 +52,8 @@ describe("AppShell brand navigation", () => {
     const brand = screen.getByTestId("brand-home-link");
     expect(brand.getAttribute("href")).toBe("/dashboard");
     expect(brand.textContent).toContain("ALEYA");
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Sign out" }).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("app-primary-nav").textContent).toMatch(/Profile/);
+    expect(screen.getByTestId("app-primary-nav").textContent).toMatch(/Uploaded References/);
   });
 });

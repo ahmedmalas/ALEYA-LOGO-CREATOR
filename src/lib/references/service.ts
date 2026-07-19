@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getUserPlanId } from "@/lib/plans/usage";
 import { getReferenceLimits } from "@/lib/references/limits";
 import {
   referenceStoragePath,
@@ -18,6 +19,7 @@ export type ProjectReferenceRow = {
   safe_filename: string;
   mime_type: string;
   size_bytes: number;
+  title: string | null;
   note: string | null;
   is_active: boolean;
   kind: string;
@@ -98,9 +100,11 @@ export async function uploadProjectReference(input: {
   filename: string;
   mimeType: string;
   note?: string | null;
+  title?: string | null;
   kind?: string | null;
 }) {
-  const limits = getReferenceLimits("free");
+  const { planId } = await getUserPlanId(input.supabase, input.ownerId);
+  const limits = getReferenceLimits(planId);
   const fileMeta = {
     name: input.filename,
     type: input.mimeType,
@@ -184,6 +188,7 @@ export async function uploadProjectReference(input: {
       safe_filename: safeFilename,
       mime_type: input.mimeType,
       size_bytes: input.file.size,
+      title: input.title?.trim() || input.filename,
       note: input.note?.trim() || null,
       kind: input.kind || inferKind(input.mimeType, input.filename),
       preview_path: previewPath,
@@ -197,6 +202,13 @@ export async function uploadProjectReference(input: {
     await input.supabase.storage.from(REFERENCE_BUCKET).remove([storagePath]);
     throw new Error(insertError?.message ?? "Could not save reference record");
   }
+
+  await input.supabase.from("usage_events").insert({
+    owner_id: input.ownerId,
+    event_type: "reference_upload",
+    project_id: input.projectId,
+    metadata: { referenceId: referenceId, filename: input.filename, mimeType: input.mimeType },
+  });
 
   return row as ProjectReferenceRow;
 }
@@ -248,11 +260,13 @@ export async function updateProjectReference(input: {
   projectId: string;
   referenceId: string;
   note?: string | null;
+  title?: string | null;
   isActive?: boolean;
   kind?: string;
 }) {
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.note !== undefined) patch.note = input.note?.trim() || null;
+  if (input.title !== undefined) patch.title = input.title?.trim() || null;
   if (input.isActive !== undefined) patch.is_active = input.isActive;
   if (input.kind !== undefined) patch.kind = input.kind;
 

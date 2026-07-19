@@ -1,3 +1,4 @@
+import { getUserPlanId } from "@/lib/plans/usage";
 import {
   createSignedReferenceUrls,
   deleteProjectReference,
@@ -16,12 +17,24 @@ export async function GET(_request: Request, { params }: Params) {
     const { supabase, user } = await requireUser();
     const rows = await listProjectReferences(supabase, projectId, user.id);
     const urls = await createSignedReferenceUrls(supabase, rows);
-    const limits = getReferenceLimits("free");
+    const { planId } = await getUserPlanId(supabase, user.id);
+    const limits = getReferenceLimits(planId);
+    const referenceIds = rows.map((row) => row.id);
+    let usedIds = new Set<string>();
+    if (referenceIds.length) {
+      const { data: usedRows } = await supabase
+        .from("generation_references")
+        .select("reference_id")
+        .eq("owner_id", user.id)
+        .in("reference_id", referenceIds);
+      usedIds = new Set((usedRows ?? []).map((row) => row.reference_id));
+    }
     return jsonOk({
       references: rows.map((row) => ({
         ...row,
         signedUrl: urls[row.id]?.url ?? null,
         previewUrl: urls[row.id]?.previewUrl ?? null,
+        usedInGeneration: usedIds.has(row.id),
       })),
       limits: {
         ...limits,
@@ -45,7 +58,11 @@ export async function POST(request: Request, { params }: Params) {
       return jsonError("file is required", 400);
     }
     const note = form.get("note");
+    const title = form.get("title");
     const kind = form.get("kind");
+    if (!(file.size > 0)) {
+      return jsonError("A real file is required — notes alone cannot create a reference.", 400);
+    }
     const row = await uploadProjectReference({
       supabase,
       ownerId: user.id,
@@ -54,6 +71,7 @@ export async function POST(request: Request, { params }: Params) {
       filename: file.name,
       mimeType: file.type || "application/octet-stream",
       note: typeof note === "string" ? note : null,
+      title: typeof title === "string" ? title : null,
       kind: typeof kind === "string" ? kind : null,
     });
     const urls = await createSignedReferenceUrls(supabase, [row]);
@@ -81,6 +99,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = (await request.json()) as {
       referenceId?: string;
       note?: string | null;
+      title?: string | null;
       isActive?: boolean;
       kind?: string;
     };
@@ -91,6 +110,7 @@ export async function PATCH(request: Request, { params }: Params) {
       projectId,
       referenceId: body.referenceId,
       note: body.note,
+      title: body.title,
       isActive: body.isActive,
       kind: body.kind,
     });

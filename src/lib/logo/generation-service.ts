@@ -163,6 +163,7 @@ export async function runGenerationJob(input: {
     }
 
     const saved = [];
+    const referenceIds = (brief.references ?? []).map((r) => r.id);
     for (const concept of concepts) {
       const { data: row, error } = await supabase
         .from("logo_concepts")
@@ -181,8 +182,9 @@ export async function runGenerationJob(input: {
             ...concept.providerMetadata,
             // Do not persist large base64 blobs in DB
             imageBase64: undefined,
-            referenceIds: (brief.references ?? []).map((r) => r.id),
+            referenceIds,
             referenceFilenames: (brief.references ?? []).map((r) => r.filename),
+            referenceTitles: (brief.references ?? []).map((r) => r.filename),
           },
           svg_markup: concept.svgMarkup,
           parent_concept_id: kind === "refine" ? input.conceptId : null,
@@ -201,18 +203,39 @@ export async function runGenerationJob(input: {
         .single();
       if (updateError) throw new Error(updateError.message);
       saved.push(updated);
+
+      if (referenceIds.length) {
+        await supabase.from("generation_references").insert(
+          referenceIds.map((referenceId) => ({
+            generation_job_id: job.id,
+            concept_id: row.id,
+            reference_id: referenceId,
+            owner_id: ownerId,
+          })),
+        );
+      }
     }
 
     const { data: finished } = await supabase
       .from("generation_jobs")
       .update({
         status: "succeeded",
-        result_payload: { conceptIds: saved.map((c) => c.id) },
+        result_payload: {
+          conceptIds: saved.map((c) => c.id),
+          referenceIds,
+        },
         finished_at: new Date().toISOString(),
       })
       .eq("id", job.id)
       .select("*")
       .single();
+
+    await supabase.from("usage_events").insert({
+      owner_id: ownerId,
+      event_type: kind === "refine" ? "refinement" : "generation",
+      project_id: projectId,
+      metadata: { jobId: job.id, referenceIds, conceptIds: saved.map((c) => c.id) },
+    });
 
     await supabase.from("logo_projects").update({ status: "ready" }).eq("id", projectId);
 

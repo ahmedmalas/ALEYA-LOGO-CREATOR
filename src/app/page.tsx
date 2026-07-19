@@ -9,7 +9,10 @@ import {
 } from "@/lib/auth/marketing-ctas";
 import { getAuthState } from "@/lib/auth/session";
 import { GALLERY_SAMPLES } from "@/lib/gallery-samples";
+import { formatBytesLabel, type PlanId } from "@/lib/plans/catalog";
+import { getUserPlanId } from "@/lib/plans/usage";
 import { PLANS } from "@/lib/pricing";
+import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -26,6 +29,16 @@ export default async function HomePage() {
   const { signedIn } = await getAuthState();
   const heroCtas = primaryMarketingCtas(signedIn);
   const closingCtas = finalBandCtas(signedIn);
+  let currentPlanId: PlanId = "free";
+  if (signedIn) {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      currentPlanId = (await getUserPlanId(supabase, user.id)).planId;
+    }
+  }
 
   return (
     <div className="min-h-screen" data-auth={signedIn ? "signed-in" : "signed-out"}>
@@ -201,7 +214,9 @@ export default async function HomePage() {
           </div>
           <div className="mt-10 grid gap-6 md:grid-cols-2">
             {PLANS.map((plan) => {
-              const cta = planCtaForAuth(plan, signedIn);
+              const cta = planCtaForAuth(plan, signedIn, currentPlanId);
+              const isCurrent = signedIn && plan.id === currentPlanId;
+              const def = plan.definition;
               return (
                 <article
                   key={plan.id}
@@ -216,24 +231,35 @@ export default async function HomePage() {
                   </div>
                   <p className="mt-3 text-sm text-black/60">{plan.description}</p>
                   <p className="mt-4 text-sm">
-                    <span className="font-medium">Generations:</span> {plan.generationLimit}
+                    <span className="font-medium">Generations:</span> {def.generationsPerHour} / hour
                   </p>
                   <p className="mt-1 text-sm">
                     <span className="font-medium">Exports:</span> {plan.exportLimit}
                   </p>
                   <p className="mt-1 text-sm">
-                    <span className="font-medium">Reference uploads:</span>{" "}
-                    {plan.id === "free"
-                      ? "Up to 10 files / project · 5 MB each (enforced)"
-                      : "Up to 40 files / project · 10 MB each (planned)"}
+                    <span className="font-medium">Reference uploads:</span> Up to{" "}
+                    {def.referenceMaxFilesPerProject} files / project ·{" "}
+                    {formatBytesLabel(def.referenceMaxFileBytes)} each ·{" "}
+                    {formatBytesLabel(def.referenceMaxTotalBytes)} storage
                   </p>
-                  <Link
-                    href={cta.href}
-                    className={`btn mt-6 ${plan.highlighted ? "btn-primary" : "btn-secondary"}`}
-                    data-cta-label={cta.label}
-                  >
-                    {cta.label}
-                  </Link>
+                  {isCurrent ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary mt-6 opacity-80"
+                      disabled
+                      data-cta-label="Current plan"
+                    >
+                      Current plan
+                    </button>
+                  ) : (
+                    <Link
+                      href={cta.href}
+                      className={`btn mt-6 ${plan.highlighted ? "btn-primary" : "btn-secondary"}`}
+                      data-cta-label={cta.label}
+                    >
+                      {cta.label}
+                    </Link>
+                  )}
                 </article>
               );
             })}

@@ -9,23 +9,39 @@ import {
 import { validateReferenceFile } from "@/lib/references/validate";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
+const REFERENCE_KINDS = [
+  { value: "logo", label: "Existing logo" },
+  { value: "sketch", label: "Sketch" },
+  { value: "packaging", label: "Packaging photo" },
+  { value: "product", label: "Product photo" },
+  { value: "screenshot", label: "Screenshot" },
+  { value: "inspiration", label: "Inspiration" },
+  { value: "receipt", label: "Receipt / invoice" },
+  { value: "document", label: "PDF / document" },
+  { value: "other", label: "Other" },
+] as const;
+
 export type ReferenceItem = {
   id: string;
   original_filename: string;
   mime_type: string;
   size_bytes: number;
+  title?: string | null;
   note: string | null;
   is_active: boolean;
   kind: string;
   previewUrl?: string | null;
   signedUrl?: string | null;
   extracted_text?: string | null;
+  usedInGeneration?: boolean;
 };
 
 type PendingFile = {
   localId: string;
   file: File;
+  title: string;
   note: string;
+  kind: string;
   progress: number;
   error: string | null;
   status: "queued" | "uploading" | "failed" | "done";
@@ -100,7 +116,9 @@ export function ReferenceUploader({
       next.push({
         localId: crypto.randomUUID(),
         file,
+        title: file.name.replace(/\.[^.]+$/, ""),
         note: "",
+        kind: file.type === "application/pdf" ? "document" : "inspiration",
         progress: 0,
         error: validation?.message ?? null,
         status: validation ? "failed" : "queued",
@@ -119,7 +137,9 @@ export function ReferenceUploader({
     );
     const form = new FormData();
     form.append("file", entry.file);
+    form.append("title", entry.title);
     form.append("note", entry.note);
+    form.append("kind", entry.kind);
     try {
       const res = await fetch(`/api/projects/${targetProjectId}/references`, {
         method: "POST",
@@ -200,7 +220,10 @@ export function ReferenceUploader({
     await refresh();
   }
 
-  async function patchSaved(id: string, patch: { note?: string; isActive?: boolean }) {
+  async function patchSaved(
+    id: string,
+    patch: { note?: string; title?: string; isActive?: boolean; kind?: string },
+  ) {
     if (!projectId) return;
     const res = await fetch(`/api/projects/${projectId}/references`, {
       method: "PATCH",
@@ -223,9 +246,12 @@ export function ReferenceUploader({
     >
       <div>
         <h2 id={`${inputId}-heading`} className="text-lg font-medium">
-          Upload references
+          Reference files (required for real uploads)
         </h2>
         <p className="mt-1 text-sm text-black/60">{helpText}</p>
+        <p className="mt-1 text-sm text-black/55">
+          Optional notes are supplementary. A reference is created only when a file is uploaded.
+        </p>
         <p className="mt-2 text-xs text-black/55" data-testid="reference-limits">
           Limits: up to {limits.maxFilesPerProject} files per project ·{" "}
           {formatBytes(limits.maxFileBytes)} per file ·{" "}
@@ -354,20 +380,54 @@ export function ReferenceUploader({
                   ) : null}
                 </div>
               </div>
-              <label className="field min-w-0 flex-1">
-                <span className="sr-only">Note for {entry.file.name}</span>
-                <input
-                  value={entry.note}
-                  placeholder="Optional note (e.g. current logo from packaging)"
-                  onChange={(e) =>
-                    setPending((prev) =>
-                      prev.map((p) =>
-                        p.localId === entry.localId ? { ...p, note: e.target.value } : p,
-                      ),
-                    )
-                  }
-                />
-              </label>
+              <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+                <label className="field">
+                  <span className="text-xs">Title</span>
+                  <input
+                    value={entry.title}
+                    onChange={(e) =>
+                      setPending((prev) =>
+                        prev.map((p) =>
+                          p.localId === entry.localId ? { ...p, title: e.target.value } : p,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span className="text-xs">Type</span>
+                  <select
+                    value={entry.kind}
+                    onChange={(e) =>
+                      setPending((prev) =>
+                        prev.map((p) =>
+                          p.localId === entry.localId ? { ...p, kind: e.target.value } : p,
+                        ),
+                      )
+                    }
+                  >
+                    {REFERENCE_KINDS.map((kind) => (
+                      <option key={kind.value} value={kind.value}>
+                        {kind.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field sm:col-span-2">
+                  <span className="text-xs">Optional note</span>
+                  <input
+                    value={entry.note}
+                    placeholder="e.g. current logo from packaging photo"
+                    onChange={(e) =>
+                      setPending((prev) =>
+                        prev.map((p) =>
+                          p.localId === entry.localId ? { ...p, note: e.target.value } : p,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+              </div>
               <div className="flex gap-2">
                 {entry.status === "failed" ? (
                   <button
@@ -429,20 +489,56 @@ export function ReferenceUploader({
                   </div>
                 )}
                 <div className="min-w-0 flex-1 space-y-2">
-                  <p className="truncate text-sm font-medium">{item.original_filename}</p>
-                  <p className="text-xs text-black/55">
-                    {item.mime_type} · {formatBytes(item.size_bytes)} · {item.kind}
+                  <p className="truncate text-sm font-medium">
+                    {item.title || item.original_filename}
                   </p>
+                  <p className="text-xs text-black/55">
+                    {item.original_filename} · {item.mime_type} · {formatBytes(item.size_bytes)}
+                  </p>
+                  {item.usedInGeneration ? (
+                    <p
+                      className="text-xs font-medium text-[var(--forest)]"
+                      data-testid="reference-used-badge"
+                    >
+                      Used in a generation
+                    </p>
+                  ) : null}
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={item.is_active}
                       onChange={(e) => void patchSaved(item.id, { isActive: e.target.checked })}
                     />
-                    Use for generation
+                    Active for generation
                   </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="field">
+                      <span className="text-xs">Title</span>
+                      <input
+                        defaultValue={item.title ?? ""}
+                        onBlur={(e) => {
+                          if (e.target.value !== (item.title ?? "")) {
+                            void patchSaved(item.id, { title: e.target.value });
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="text-xs">Type</span>
+                      <select
+                        defaultValue={item.kind}
+                        onChange={(e) => void patchSaved(item.id, { kind: e.target.value })}
+                      >
+                        {REFERENCE_KINDS.map((kind) => (
+                          <option key={kind.value} value={kind.value}>
+                            {kind.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                   <label className="field">
-                    <span className="text-xs">Note</span>
+                    <span className="text-xs">Optional note</span>
                     <input
                       defaultValue={item.note ?? ""}
                       onBlur={(e) => {
