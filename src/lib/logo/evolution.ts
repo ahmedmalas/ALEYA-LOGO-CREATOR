@@ -152,28 +152,27 @@ export function modeRules(mode: GenerationMode): string {
   switch (mode) {
     case "mirror":
       return [
-        "MODE=Mirror: recreate the reference as faithfully as possible.",
-        "Preserve layout, symbol placement, typography hierarchy, proportions, spacing, colours and overall identity.",
-        "Only clean up alignment, geometry, resolution and production quality.",
+        "MODE=Mirror: recognisably the same artwork.",
+        "Start from the immutable faithful redraw (traced reference paths).",
+        "Production cleanup only — alignment, quantisation, segment tagging.",
         "Do NOT invent a different logo or unrelated concept.",
       ].join(" ");
     case "refine":
       return [
-        "MODE=Refine: keep the same recognisable logo identity.",
-        "Improve spacing, typography, balance, stroke consistency, geometry, legibility and production quality.",
-        "Do not replace the core symbol unless the user instructed otherwise.",
+        "MODE=Refine: the same logo, professionally cleaned and balanced.",
+        "Derive from the faithful redraw — optical kerning, baseline correction, stroke/curve cleanup, symmetry, preserve enclosed details.",
+        "Separate mark vs wordmark editing; do not replace the core symbol.",
       ].join(" ");
     case "advance":
       return [
-        "MODE=Advance: create a modern premium evolution of the original.",
-        "Retain the strongest recognisable brand DNA (symbol, text, colour cues, composition).",
-        "Improve sophistication, distinctiveness, scalability and brand presence.",
-        "Avoid generic AI marks, swooshes, clip-art and template-looking outputs.",
+        "MODE=Advance: a stronger contemporary identity that clearly descends from the original.",
+        "Derive from the faithful redraw — controlled symbol simplification, premium geometry, lockup rebalance, typography substitutes.",
+        "Retain brand DNA (mark, text, colour cues). Avoid generic AI marks and template drift.",
       ].join(" ");
     case "explore":
       return [
-        "MODE=Explore: broader creative directions inspired by the reference design language.",
-        "Greater deviation is acceptable, but still echo typography mood, colour logic and distinctive traits.",
+        "MODE=Explore: broader alternatives from the same path DNA — do not pretend to be faithful.",
+        "Layout reinterpretation and stronger deviation are acceptable while echoing colour logic and distinctive traits.",
       ].join(" ");
   }
 }

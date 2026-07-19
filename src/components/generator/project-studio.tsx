@@ -28,6 +28,19 @@ type Concept = {
     conceptGroup?: string;
     conceptGroupLabel?: string;
     similarityLevel?: number;
+    visualSsim?: number | null;
+    modeDifferentiation?: string;
+    typographySuggestion?: {
+      matched?: string;
+      category?: string;
+      substitutes?: string[];
+      rationale?: string;
+    };
+    sideBySideScores?: Record<
+      string,
+      { ssim: number; score: number; mode: string; differentiation: string }
+    >;
+    transformOperations?: string[];
     retained?: string;
     improved?: string;
     logoText?: string;
@@ -425,7 +438,10 @@ export function ProjectStudio({
                       <h2 className="text-lg">{meta?.conceptGroupLabel || concept.title}</h2>
                       {typeof meta?.similarityLevel === "number" ? (
                         <span className="text-xs uppercase tracking-wide text-[var(--forest)]">
-                          Similarity {meta.similarityLevel}%
+                          vs original {meta.similarityLevel}%
+                          {typeof meta.visualSsim === "number"
+                            ? ` · SSIM ${meta.visualSsim.toFixed(2)}`
+                            : ""}
                         </span>
                       ) : null}
                     </div>
@@ -433,6 +449,9 @@ export function ProjectStudio({
                       {concept.layout}
                       {meta?.groupMode ? ` · ${meta.groupMode}` : ""}
                     </p>
+                    {meta?.modeDifferentiation ? (
+                      <p className="text-xs text-black/65">{meta.modeDifferentiation}</p>
+                    ) : null}
                     {meta?.retained ? (
                       <p className="text-xs text-black/60">
                         <span className="font-medium text-[var(--forest-deep)]">Retained:</span>{" "}
@@ -443,6 +462,15 @@ export function ProjectStudio({
                       <p className="text-xs text-black/60">
                         <span className="font-medium text-[var(--forest-deep)]">Improved:</span>{" "}
                         {meta.improved}
+                      </p>
+                    ) : null}
+                    {meta?.typographySuggestion?.matched ? (
+                      <p className="text-xs text-black/60">
+                        <span className="font-medium text-[var(--forest-deep)]">Typography:</span>{" "}
+                        {meta.typographySuggestion.matched}
+                        {meta.typographySuggestion.substitutes?.length
+                          ? ` · substitutes ${meta.typographySuggestion.substitutes.slice(0, 2).join(", ")}`
+                          : ""}
                       </p>
                     ) : null}
                     {meta?.referenceFilenames?.length ? (

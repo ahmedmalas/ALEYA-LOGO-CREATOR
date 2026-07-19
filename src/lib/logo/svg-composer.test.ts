@@ -126,14 +126,30 @@ describe("composeSvgConcepts reconstruction path", () => {
     const concepts = await composeSvgConcepts(referenceBrief, 4, "mirror-seed");
     expect(concepts).toHaveLength(4);
     const faithful = concepts.find((c) => c.providerMetadata.conceptGroup === "faithful")!;
-    expect(faithful.providerMetadata.algorithm).toBe("aleya-svg-redraw-v2");
+    expect(faithful.providerMetadata.algorithm).toBe("aleya-svg-redraw-v3");
     expect(faithful.providerMetadata.markKind).toBe("reconstructed-paths");
     expect(faithful.providerMetadata.conditionedOnReference).toBe(true);
+    expect(faithful.providerMetadata.derivedFromFaithfulRedraw).toBe(true);
     expect(faithful.svgMarkup).toContain("data-reconstruction");
     expect(faithful.svgMarkup).toContain("<path");
     // Must not inject the old generic monogram/shield primitive templates as the sole mark.
     expect(faithful.svgMarkup).not.toContain('data-mark="shield"');
     expect(Number(faithful.providerMetadata.visualSsim)).toBeGreaterThanOrEqual(0.78);
+
+    const refine = concepts.find((c) => c.providerMetadata.conceptGroup === "refinement")!;
+    const advance = concepts.find((c) => c.providerMetadata.conceptGroup === "evolution")!;
+    expect(refine.svgMarkup).toContain('data-evolved="refine"');
+    expect(advance.svgMarkup).toContain('data-evolved="advance"');
+    expect(refine.providerMetadata.modeDifferentiation).toMatch(/cleaned/i);
+    expect(advance.providerMetadata.modeDifferentiation).toMatch(/Contemporary|descended/i);
+    expect(refine.svgMarkup).toContain("data-segment=");
+    expect(advance.svgMarkup).toContain("data-edit-group=");
+    expect(faithful.providerMetadata.sideBySideScores).toBeTruthy();
+    expect(Object.keys(faithful.providerMetadata.sideBySideScores as object).length).toBe(4);
+    // Advance should diverge more than Refine from the original (side-by-side scores).
+    const refineScore = Number(refine.providerMetadata.similarityLevel);
+    const advanceScore = Number(advance.providerMetadata.similarityLevel);
+    expect(advanceScore).toBeLessThanOrEqual(refineScore + 2);
   }, 30000);
 
   it("rejects Mirror when reconstruction is missing", async () => {

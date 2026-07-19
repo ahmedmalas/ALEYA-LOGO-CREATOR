@@ -59,7 +59,7 @@ describe("reconstructReferenceLogo", () => {
     expect(result.reconstructedSvg).toContain("LAB");
   });
 
-  it("derives refine/advance from the same reconstruction", async () => {
+  it("derives refine/advance from the same reconstruction with real transforms", async () => {
     const png = await sampleLogo();
     const result = await reconstructReferenceLogo({
       buffer: png,
@@ -68,15 +68,27 @@ describe("reconstructReferenceLogo", () => {
     const mirror = deriveSvgFromReconstruction(result.reconstructedSvg, "mirror");
     const refine = deriveSvgFromReconstruction(result.reconstructedSvg, "refine", {
       simplification: 40,
+      logoText: "NORTHWIND",
+      fontCategoryMatch: "serif",
     });
     const advance = deriveSvgFromReconstruction(result.reconstructedSvg, "advance", {
       modernisation: 70,
+      simplification: 45,
+      logoText: "NORTHWIND",
+      fontGuess: "Libre Baskerville",
+      preserveTypography: false,
     });
     expect(mirror).toContain("<path");
+    expect(mirror).toContain("data-segment=");
     expect(refine).toContain("<path");
+    expect(refine).toContain('data-evolved="refine"');
+    expect(refine).toContain("<!-- typography:");
     expect(advance).toContain('data-evolved="advance"');
-    // Same path DNA — advance must not drop reconstructed paths
+    expect(advance).toContain("data-edit-group=");
+    // Same path DNA — advance must not drop reconstructed mark paths
     expect((advance.match(/<path/g) || []).length).toBeGreaterThan(0);
+    // Refine and Advance must differ (genuine transforms, not the same scale nudge)
+    expect(refine).not.toEqual(advance);
   }, 30000);
 
   it("scores Mirror redraw above similarity threshold vs reference", async () => {

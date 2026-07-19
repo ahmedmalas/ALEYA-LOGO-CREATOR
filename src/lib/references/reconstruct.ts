@@ -1,4 +1,9 @@
 import sharp from "sharp";
+import {
+  applyDesignTransforms,
+  type TransformReport,
+  type TypographySuggestion,
+} from "@/lib/logo/design-transforms";
 // imagetracerjs has no types; CommonJS export.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ImageTracer = require("imagetracerjs") as {
@@ -344,7 +349,41 @@ function forceFills(svgInner: string, hex: string): string {
   return svgInner
     .replace(/fill="[^"]*"/gi, `fill="${hex}"`)
     .replace(/stroke="[^"]*"/gi, `stroke="none"`)
+    .replace(/\sopacity="[^"]*"/gi, "")
+    .replace(/<path\b[^>]*opacity="0"[^>]*\/?>/gi, "")
     .replace(/<rect[^>]*fill="${hex}"[^>]*\/?>/gi, "");
+}
+
+function isNearColour(hex: string, target: string, maxDist: number): boolean {
+  return colourDistance(parseHex(hex), parseHex(target)) <= maxDist;
+}
+
+/** Drop full-artboard underlays and near-invisible paths that wash out solid fills. */
+function stripSpuriousTracePaths(svg: string, width: number, height: number): string {
+  const area = Math.max(1, width * height);
+  return svg.replace(/<path\b([^>]*)\/?>/gi, (full, attrs: string) => {
+    if (/opacity="0"/i.test(attrs)) return "";
+    const opacity = Number((attrs.match(/opacity="([^"]+)"/i) || [])[1] ?? "1");
+    if (Number.isFinite(opacity) && opacity < 0.2) return "";
+    const d = (attrs.match(/\bd="([^"]*)"/i) || [])[1] || "";
+    const nums = [...d.matchAll(/[+-]?(?:\d*\.\d+|\d+)/g)].map((m) => Number(m[0]));
+    if (nums.length >= 6) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        minX = Math.min(minX, nums[i]!);
+        minY = Math.min(minY, nums[i + 1]!);
+        maxX = Math.max(maxX, nums[i]!);
+        maxY = Math.max(maxY, nums[i + 1]!);
+      }
+      const cover = Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
+      // Tracer underlays: nearly full-frame rectangles.
+      if (cover > area * 0.85 && nums.length <= 16) return "";
+    }
+    return full.replace(/\sopacity="[^"]*"/gi, "");
+  });
 }
 
 /**
@@ -357,14 +396,39 @@ function traceColourLayers(
   height: number,
   regions: ColourRegion[],
 ): string {
+  const background = regions.find((r) => r.role === "background");
+  const bgHex = background?.hex ?? "#FFFFFF";
   const totalInk = regions
-    .filter((r) => r.role !== "background" && !isNearWhite(r.hex))
+    .filter(
+      (r) =>
+        r.role !== "background" &&
+        !isNearWhite(r.hex) &&
+        !isNearColour(r.hex, bgHex, 36),
+    )
     .reduce((s, r) => s + r.pixelCount, 0);
-  const ink = regions
-    .filter((r) => r.role !== "background" && !isNearWhite(r.hex) && !isLowChromaGray(r.hex))
-    .filter((r) => r.pixelCount > Math.max(16, totalInk * 0.004))
-    .sort((a, b) => b.pixelCount - a.pixelCount)
-    .slice(0, 6);
+  // Keep strong brand inks only — absorb near-background + anti-alias greys into parents.
+  const candidates = regions
+    .filter(
+      (r) =>
+        r.role !== "background" &&
+        !isNearWhite(r.hex) &&
+        !isNearColour(r.hex, bgHex, 36) &&
+        !isLowChromaGray(r.hex),
+    )
+    .filter((r) => r.pixelCount > Math.max(48, totalInk * 0.015))
+    .sort((a, b) => b.pixelCount - a.pixelCount);
+
+  // Merge near-duplicate inks (e.g. dark green + mid anti-alias green) into the dominant parent.
+  const ink: ColourRegion[] = [];
+  for (const region of candidates) {
+    const parent = ink.find((kept) => isNearColour(kept.hex, region.hex, 85));
+    if (parent) {
+      parent.pixelCount += region.pixelCount;
+      continue;
+    }
+    ink.push({ ...region });
+    if (ink.length >= 3) break;
+  }
 
   if (ink.length === 0) {
     return traceRasterToSvg(rgba, width, height, {
@@ -376,18 +440,22 @@ function traceColourLayers(
   }
 
   // Assign every opaque pixel to nearest kept ink colour (absorb anti-alias into parents).
+  // Trace as black-on-white — ImageTracer collapses dark-on-transparent into a washed
+  // full-frame path; brand colour is reapplied via forceFills after tracing.
   const centers = ink.map((r) => parseHex(r.hex));
+  const bgRgb = parseHex(bgHex);
   const layers: string[] = [];
   for (let idx = 0; idx < ink.length; idx += 1) {
     const region = ink[idx]!;
-    const [tr, tg, tb] = centers[idx]!;
-    const layer = Buffer.alloc(width * height * 4, 0);
+    const layer = Buffer.alloc(width * height * 4, 255);
+    for (let i = 3; i < layer.length; i += 4) layer[i] = 255;
     let painted = 0;
     for (let i = 0; i < rgba.length; i += 4) {
       const a = rgba[i + 3]!;
       if (a < 32) continue;
       const rgb: [number, number, number] = [rgba[i]!, rgba[i + 1]!, rgba[i + 2]!];
-      if (isNearWhite(rgbToHex(rgb[0], rgb[1], rgb[2]))) continue;
+      const hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
+      if (isNearWhite(hex) || colourDistance(rgb, bgRgb) <= 36) continue;
       let best = 0;
       let bestD = Infinity;
       for (let c = 0; c < centers.length; c += 1) {
@@ -397,10 +465,11 @@ function traceColourLayers(
           best = c;
         }
       }
-      if (best !== idx || bestD > 90) continue;
-      layer[i] = tr;
-      layer[i + 1] = tg;
-      layer[i + 2] = tb;
+      // Wider absorb so anti-alias / mid-tones collapse into brand inks (solid fills).
+      if (best !== idx || bestD > 110) continue;
+      layer[i] = 0;
+      layer[i + 1] = 0;
+      layer[i + 2] = 0;
       layer[i + 3] = 255;
       painted += 1;
     }
@@ -430,16 +499,22 @@ function traceColourLayers(
     let inner = traced
       .replace(/^[\s\S]*?<svg[^>]*>/i, "")
       .replace(/<\/svg>[\s\S]*$/i, "");
+    // Drop white underlays BEFORE recolouring (forceFills would otherwise paint them brand).
+    inner = inner
+      .replace(/<path[^>]*fill="(?:#fff(?:fff)?|white|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\))"[^>]*\/?>/gi, "")
+      .replace(/<rect[^>]*fill="(?:#fff(?:fff)?|white|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\))"[^>]*\/?>/gi, "");
+    inner = stripSpuriousTracePaths(inner, width, height);
     inner = forceFills(inner, region.hex);
     if (inner.trim()) {
       layers.push(`<g data-colour-layer="${region.hex}" data-role="${region.role}">${inner}</g>`);
     }
   }
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
+  const composed = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   ${layers.join("\n  ")}
 </svg>`;
+  return stripSpuriousTracePaths(composed, width, height);
 }
 
 /**
@@ -497,7 +572,11 @@ export async function reconstructReferenceLogo(input: {
       });
     }
     reconstructedSvg = normalizeSvgViewBox(
-      stripBackgroundFills(traced, background?.hex ?? "#FFFFFF"),
+      stripSpuriousTracePaths(
+        stripBackgroundFills(traced, background?.hex ?? "#FFFFFF"),
+        width,
+        height,
+      ),
       width,
       height,
     );
@@ -529,57 +608,46 @@ export type DeriveOptions = {
   creativity?: number;
   palette?: string[];
   preserveColours?: boolean;
+  preserveTypography?: boolean;
+  preserveSymbol?: boolean;
+  logoText?: string;
+  fontGuess?: string;
+  fontCategoryMatch?: string;
+  typographyCategory?: string;
+  letterSpacing?: string;
 };
 
-/** Derive Refine/Advance variants from a faithful reconstructed SVG without swapping symbols. */
+export type { TransformReport, TypographySuggestion };
+
+/**
+ * Derive Mirror / Refine / Advance / Explore from an immutable faithful redraw.
+ * Performs genuine optical and geometric transforms — never swaps in a generic mark.
+ */
 export function deriveSvgFromReconstruction(
   faithfulSvg: string,
   mode: "mirror" | "refine" | "advance" | "explore",
   options?: DeriveOptions,
 ): string {
-  let svg = faithfulSvg;
-  const modernisation = options?.modernisation ?? 40;
-  const simplification = options?.simplification ?? 25;
-  const creativity = options?.creativity ?? 40;
+  return deriveSvgFromReconstructionWithReport(faithfulSvg, mode, options).svg;
+}
 
-  if (mode === "mirror") {
-    // Production cleanup only: round transform noise, keep geometry.
-    return svg.replace(/(\d+\.\d{3,})/g, (m) => Number(m).toFixed(2));
-  }
-
-  if (mode === "refine") {
-    // Slight optical cleanup: nudge scale toward center for balance.
-    const scale = 1 + Math.min(0.04, simplification / 2000);
-    svg = svg.replace(
-      /<g transform="translate\(([^,]+),([^)]+)\) scale\(([^)]+)\)"/,
-      (_, tx, ty, sc) => {
-        const s = Number(sc) * scale;
-        return `<g transform="translate(${tx},${ty}) scale(${s.toFixed(5)})"`;
-      },
-    );
-    return svg.replace(/(\d+\.\d{3,})/g, (m) => Number(m).toFixed(2));
-  }
-
-  if (mode === "advance") {
-    // Premium evolution: subtle scale — geometry stays the reconstructed mark.
-    const scale = 1 + Math.min(0.08, modernisation / 1200);
-    svg = svg.replace(
-      /<g transform="translate\(([^,]+),([^)]+)\) scale\(([^)]+)\)"/,
-      (_, tx, ty, sc) => {
-        const s = Number(sc) * scale;
-        return `<g transform="translate(${tx},${ty}) scale(${s.toFixed(5)})" data-evolved="advance"`;
-      },
-    );
-    return svg;
-  }
-
-  // Explore: still rooted in reconstruction; allow larger presentational scale.
-  const scale = 1 + Math.min(0.14, creativity / 800);
-  return svg.replace(
-    /<g transform="translate\(([^,]+),([^)]+)\) scale\(([^)]+)\)"/,
-    (_, tx, ty, sc) => {
-      const s = Number(sc) * scale;
-      return `<g transform="translate(${tx},${ty}) scale(${s.toFixed(5)})" data-evolved="explore"`;
-    },
-  );
+export function deriveSvgFromReconstructionWithReport(
+  faithfulSvg: string,
+  mode: "mirror" | "refine" | "advance" | "explore",
+  options?: DeriveOptions,
+): { svg: string; report: TransformReport } {
+  return applyDesignTransforms(faithfulSvg, mode, {
+    modernisation: options?.modernisation,
+    simplification: options?.simplification,
+    creativity: options?.creativity,
+    palette: options?.palette,
+    preserveColours: options?.preserveColours,
+    preserveTypography: options?.preserveTypography,
+    preserveSymbol: options?.preserveSymbol,
+    logoText: options?.logoText,
+    fontGuess: options?.fontGuess,
+    fontCategoryMatch: options?.fontCategoryMatch,
+    typographyCategory: options?.typographyCategory,
+    letterSpacing: options?.letterSpacing,
+  });
 }

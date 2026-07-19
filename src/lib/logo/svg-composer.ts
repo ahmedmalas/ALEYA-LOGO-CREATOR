@@ -17,7 +17,8 @@ import {
 } from "@/lib/logo/similarity";
 import { summarizeReferencesForPrompt } from "@/lib/references/brief";
 import type { ReferenceAnalysis } from "@/lib/references/analysis-types";
-import { deriveSvgFromReconstruction } from "@/lib/references/reconstruct";
+import { deriveSvgFromReconstructionWithReport } from "@/lib/references/reconstruct";
+import type { TransformReport } from "@/lib/logo/design-transforms";
 import { sanitizeHexColor } from "@/lib/security/colors";
 import type {
   ConceptPalette,
@@ -473,17 +474,29 @@ export async function composeSvgConcepts(
     return composePrimitiveConcepts(brief, count, seed, controls);
   }
 
-  const faithfulSvg = deriveSvgFromReconstruction(recon.svg, "mirror", {
+  const deriveOpts = {
     modernisation: controls.modernisation,
     simplification: controls.simplification,
+    creativity: controls.creativity,
     preserveColours: controls.preserveColours,
+    preserveTypography: controls.preserveTypography,
+    preserveSymbol: controls.preserveSymbol,
     palette: analysis?.colourPalette,
-  });
+    logoText,
+    fontGuess: analysis?.fontGuess,
+    fontCategoryMatch: analysis?.fontCategoryMatch,
+    typographyCategory: analysis?.typographyCategory || analysis?.typographyCharacteristics,
+    letterSpacing: analysis?.letterSpacing,
+  };
+
+  // Immutable starting point: faithful Mirror redraw (production cleanup only).
+  const faithful = deriveSvgFromReconstructionWithReport(recon.svg, "mirror", deriveOpts);
+  const faithfulSvg = faithful.svg;
 
   // Visual similarity gate on the faithful redraw (conditioning target).
   let mirrorReport = null as Awaited<ReturnType<typeof compareLogoVisuals>> | null;
-  if (recon.pngBase64) {
-    const refPng = Buffer.from(recon.pngBase64, "base64");
+  const refPng = recon.pngBase64 ? Buffer.from(recon.pngBase64, "base64") : null;
+  if (refPng) {
     mirrorReport = await compareLogoVisuals(refPng, faithfulSvg, {
       threshold: MIRROR_SIMILARITY_THRESHOLD,
     });
@@ -498,24 +511,64 @@ export async function composeSvgConcepts(
   const layout = mapAnalysisLayout(analysis, brief.layoutDirection);
   const palette = buildPalette(brief, controls, analysis, 0);
   const concepts: GeneratedConcept[] = [];
+  const sideBySideScores: Record<
+    string,
+    { ssim: number; score: number; mode: string; differentiation: string }
+  > = {};
 
   for (let i = 0; i < ordered.length; i += 1) {
     const group = ordered[i]!;
-    const svgMarkup = deriveSvgFromReconstruction(faithfulSvg, group.mode, {
-      modernisation: controls.modernisation,
-      simplification: controls.simplification,
-      creativity: controls.creativity,
-      preserveColours: controls.preserveColours,
-      palette: analysis?.colourPalette,
-    }).replace(
+    // Always derive from the immutable faithful redraw — never from a prior evolved variant.
+    // Per-group intensity so Advance / Explore clearly diverge even when session mode is Refine.
+    const groupOpts = {
+      ...deriveOpts,
+      modernisation:
+        group.mode === "advance"
+          ? Math.max(deriveOpts.modernisation, 70)
+          : group.mode === "explore"
+            ? Math.max(deriveOpts.modernisation, 55)
+            : group.mode === "refine"
+              ? Math.min(deriveOpts.modernisation, 50)
+              : deriveOpts.modernisation,
+      simplification:
+        group.mode === "advance"
+          ? Math.max(deriveOpts.simplification, 45)
+          : group.mode === "refine"
+            ? Math.max(deriveOpts.simplification, 30)
+            : deriveOpts.simplification,
+      creativity:
+        group.mode === "explore"
+          ? Math.max(deriveOpts.creativity, 75)
+          : group.mode === "advance"
+            ? Math.max(deriveOpts.creativity, 50)
+            : deriveOpts.creativity,
+      preserveTypography:
+        group.mode === "advance" || group.mode === "explore"
+          ? false
+          : deriveOpts.preserveTypography,
+    };
+    const derived =
+      group.mode === "mirror"
+        ? faithful
+        : deriveSvgFromReconstructionWithReport(faithfulSvg, group.mode, groupOpts);
+    const transformReport: TransformReport = derived.report;
+    const svgMarkup = derived.svg.replace(
       'data-reconstruction="true"',
       `data-reconstruction="true" data-concept-group="${group.id}" data-group-mode="${group.mode}"`,
     );
 
     let visualScore: number = group.similarity;
-    if (recon.pngBase64 && (group.mode === "mirror" || group.mode === "refine")) {
-      const report = await compareLogoVisuals(Buffer.from(recon.pngBase64, "base64"), svgMarkup);
+    let visualSsim: number | null = mirrorReport?.ssim ?? null;
+    if (refPng) {
+      const report = await compareLogoVisuals(refPng, svgMarkup);
       visualScore = report.score;
+      visualSsim = report.ssim;
+      sideBySideScores[group.id] = {
+        ssim: report.ssim,
+        score: report.score,
+        mode: group.mode,
+        differentiation: transformReport.differentiation,
+      };
       if (group.mode === "mirror" && !report.passed) {
         throw new MirrorSimilarityError(report);
       }
@@ -525,6 +578,7 @@ export async function composeSvgConcepts(
       analysis?.logoMark ||
       analysis?.symbolGeometry ||
       "Reconstructed reference mark (traced paths)";
+    const improvedFromOps = transformReport.operations.slice(0, 5).join("; ");
     const prompt = [
       buildEvolutionPrompt({
         brief,
@@ -536,12 +590,18 @@ export async function composeSvgConcepts(
         palette: [palette.primary, palette.secondary, palette.accent],
         iconConcept,
       }),
-      "CONDITIONING: use reconstructed SVG paths traced from the uploaded reference — do not invent a different symbol.",
+      "CONDITIONING: immutable faithful redraw → mode-specific design transforms. Do not invent a different symbol.",
       recon.source ? `Reconstruction source: ${recon.source}` : null,
-      analysis?.fontGuess ? `Font guess: ${analysis.fontGuess}` : null,
-      analysis?.fontCategoryMatch ? `Font category: ${analysis.fontCategoryMatch}` : null,
+      `Transform ops: ${transformReport.operations.join("; ")}`,
+      `Differentiation: ${transformReport.differentiation}`,
+      `Mark/wordmark/detail paths: ${transformReport.markPathCount}/${transformReport.wordmarkPathCount}/${transformReport.preservedDetails}`,
+      `Typography: ${transformReport.typography.matched} (${transformReport.typography.category}); substitutes: ${transformReport.typography.substitutes.join(", ")}`,
+      transformReport.typography.rationale,
       mirrorReport
         ? `Faithful redraw SSIM vs reference: ${mirrorReport.ssim.toFixed(3)} (threshold ${mirrorReport.threshold})`
+        : null,
+      visualSsim !== null
+        ? `This variant SSIM vs reference: ${visualSsim.toFixed(3)} (score ${visualScore})`
         : null,
     ]
       .filter(Boolean)
@@ -554,7 +614,7 @@ export async function composeSvgConcepts(
       layout,
       palette,
       typography: {
-        display: analysis?.fontGuess || fonts.display,
+        display: transformReport.typography.matched || analysis?.fontGuess || fonts.display,
         body: fonts.body,
       },
       svgMarkup,
@@ -562,25 +622,46 @@ export async function composeSvgConcepts(
       providerMetadata: {
         seed: `${seed}:${group.id}:${hashSeed(seed + group.id)}`,
         variant: i,
-        algorithm: "aleya-svg-redraw-v2",
+        algorithm: "aleya-svg-redraw-v3",
         conceptGroup: group.id,
         conceptGroupLabel: group.label,
         generationMode: controls.mode,
         groupMode: group.mode,
         similarityLevel: visualScore,
-        visualSsim: mirrorReport?.ssim ?? null,
+        visualSsim,
+        sideBySideScores,
+        transformOperations: transformReport.operations,
+        modeDifferentiation: transformReport.differentiation,
+        preservedDetails: transformReport.preservedDetails,
+        markPathCount: transformReport.markPathCount,
+        wordmarkPathCount: transformReport.wordmarkPathCount,
+        typographySuggestion: transformReport.typography,
         retained: describeRetention({ group, controls, analysis, logoText }),
-        improved: describeImprovements({ group, controls, analysis }),
+        improved: [
+          describeImprovements({ group, controls, analysis }),
+          improvedFromOps,
+        ]
+          .filter(Boolean)
+          .join("; "),
         logoText,
         markKind: "reconstructed-paths",
         reconstructionSource: recon.source,
         conditionedOnReference: true,
+        derivedFromFaithfulRedraw: true,
         controls,
         referenceIds: (brief.references ?? []).map((r) => r.id),
         referenceFilenames: (brief.references ?? []).map((r) => r.filename),
         referenceSummary: summarizeReferencesForPrompt(brief.references),
       },
     });
+  }
+
+  // Attach full side-by-side scoreboard to every concept for UI comparison.
+  for (const concept of concepts) {
+    concept.providerMetadata = {
+      ...concept.providerMetadata,
+      sideBySideScores,
+    };
   }
 
   return concepts;
