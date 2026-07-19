@@ -1,5 +1,6 @@
 import { runGenerationJob } from "@/lib/logo/generation-service";
 import { ProviderError } from "@/lib/providers";
+import { handleRouteError, jsonError, readJson } from "@/lib/security/api";
 import { createClient } from "@/lib/supabase/server";
 import type { LogoBrief } from "@/types/logo";
 import { NextResponse } from "next/server";
@@ -13,21 +14,31 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   try {
-    const body = schema.parse(await request.json());
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return jsonError("Unauthorized", 401);
+
+    const body = await readJson(request, schema);
     const { data: project } = await supabase
       .from("logo_projects")
       .select("*")
       .eq("id", body.projectId)
       .eq("owner_id", user.id)
       .single();
-    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    if (!project) return jsonError("Project not found", 404);
+
+    const { data: concept } = await supabase
+      .from("logo_concepts")
+      .select("id, project_id")
+      .eq("id", body.conceptId)
+      .eq("owner_id", user.id)
+      .single();
+    if (!concept || concept.project_id !== body.projectId) {
+      return jsonError("Concept not found on this project", 404);
+    }
 
     const brief: LogoBrief = {
       businessName: project.business_name,
@@ -55,12 +66,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Refine failed",
-        code: error instanceof ProviderError ? error.code : undefined,
-      },
-      { status: error instanceof ProviderError ? 502 : 400 },
-    );
+    if (error instanceof ProviderError) {
+      const status =
+        error.code === "rate_limited" ? 429 : error.code === "missing_credentials" ? 503 : 502;
+      return NextResponse.json({ error: error.message, code: error.code }, { status });
+    }
+    if ((error as { status?: number }).status === 429) {
+      return jsonError(error instanceof Error ? error.message : "Rate limit exceeded", 429);
+    }
+    return handleRouteError(error, "Refine failed");
   }
 }

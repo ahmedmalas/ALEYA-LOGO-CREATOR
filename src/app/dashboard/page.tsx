@@ -23,33 +23,23 @@ export default async function DashboardPage() {
     <AppShell email={user.email}>
       {isEmpty ? <FirstRunOnboarding /> : null}
 
-      <div className="mb-6 flex items-end justify-between gap-4 animate-rise">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 animate-rise">
         <div>
-          <h1 className="text-3xl">Your logo projects</h1>
-          <p className="mt-1 text-black/60">Create, generate, compare, and save Brand Kits.</p>
+          <h1 className="text-3xl">{isEmpty ? "Welcome" : "Your logo projects"}</h1>
+          <p className="mt-1 text-black/60">
+            {isEmpty
+              ? "Start with a brief, then generate and refine concepts."
+              : "Create, generate, compare, and save Brand Kits."}
+          </p>
         </div>
-        <Link href="/projects/new" className="btn btn-primary">
-          New project
-        </Link>
+        {!isEmpty ? (
+          <Link href="/projects/new" className="btn btn-primary">
+            New project
+          </Link>
+        ) : null}
       </div>
 
-      {isEmpty ? (
-        <div className="panel rounded-3xl p-8 md:p-10">
-          <h2 className="text-xl">No projects yet</h2>
-          <p className="mt-2 max-w-xl text-black/60">
-            Your workspace is ready. Start with a business name and brand direction — you can
-            regenerate and refine before you commit to a Brand Kit.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/projects/new" className="btn btn-primary">
-              Start a project
-            </Link>
-            <Link href="/pricing" className="btn btn-secondary">
-              See Free plan limits
-            </Link>
-          </div>
-        </div>
-      ) : (
+      {isEmpty ? null : (
         <div className="grid gap-4 md:grid-cols-2">
           {(projects ?? []).map((project, index) => (
             <Link
@@ -59,8 +49,8 @@ export default async function DashboardPage() {
               style={{ animationDelay: `${index * 60}ms` }}
             >
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl">{project.business_name}</h2>
-                <span className="rounded-full bg-[var(--mist)] px-3 py-1 text-xs uppercase tracking-wide">
+                <h2 className="text-xl break-words">{project.business_name}</h2>
+                <span className="shrink-0 rounded-full bg-[var(--mist)] px-3 py-1 text-xs uppercase tracking-wide">
                   {project.status}
                 </span>
               </div>

@@ -45,18 +45,27 @@ function NewProjectForm() {
       aleyaReturnUrl: params.get("return_url") || undefined,
     };
 
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(json.error ?? "Could not create project");
-      return;
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(
+          res.status === 401
+            ? "Your session expired. Sign in again to continue."
+            : (json.error ?? "Could not create project"),
+        );
+        return;
+      }
+      router.push(`/projects/${json.project.id}`);
+    } catch {
+      setError("Could not create the project. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-    router.push(`/projects/${json.project.id}`);
   }
 
   return (
@@ -118,18 +127,22 @@ function NewProjectForm() {
             </select>
           </label>
           <label className="field">
-            <span>Preferred colours</span>
+            <span>Preferred colours (hex)</span>
             <input name="preferredColors" placeholder="#1F4D45, #B08A4F" />
           </label>
           <label className="field md:col-span-2">
-            <span>Colours to avoid</span>
+            <span>Colours to avoid (hex)</span>
             <input name="avoidColors" placeholder="#FF00FF" />
           </label>
           <label className="field md:col-span-2">
             <span>Icon or symbol ideas</span>
             <textarea name="iconIdeas" rows={3} placeholder="Abstract leaf mark, geometric N monogram" />
           </label>
-          {error ? <p className="md:col-span-2 text-sm text-[var(--danger)]">{error}</p> : null}
+          {error ? (
+            <p className="md:col-span-2 text-sm text-[var(--danger)]" role="alert">
+              {error}
+            </p>
+          ) : null}
           <div className="md:col-span-2">
             <button className="btn btn-primary" disabled={loading} type="submit">
               {loading ? "Saving…" : "Save project"}
@@ -143,7 +156,7 @@ function NewProjectForm() {
 
 export default function NewProjectPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<div className="p-8 text-center text-black/60">Loading project form…</div>}>
       <NewProjectForm />
     </Suspense>
   );

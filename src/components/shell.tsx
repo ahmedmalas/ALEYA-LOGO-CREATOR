@@ -9,27 +9,36 @@ export function AppShell({
 }) {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 md:px-8">
-      <header className="mb-8 flex items-center justify-between gap-4 animate-rise">
+      <header className="mb-8 flex flex-wrap items-center justify-between gap-3 animate-rise">
         <Link href="/dashboard" className="brand text-2xl tracking-tight text-[var(--forest-deep)]">
           ALEYA
-          <span className="ml-2 text-base font-normal tracking-normal text-black/55">Logo Creator</span>
+          <span className="ml-2 text-base font-normal tracking-normal text-black/55">
+            Logo Creator
+          </span>
         </Link>
-        <nav className="flex items-center gap-3 text-sm">
-          <Link href="/dashboard" className="hover:text-[var(--forest)]">
+        <nav
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"
+          aria-label="App"
+        >
+          <Link href="/dashboard" className="min-h-10 inline-flex items-center hover:text-[var(--forest)]">
             Projects
           </Link>
-          <Link href="/brand-kits" className="hover:text-[var(--forest)]">
+          <Link href="/brand-kits" className="min-h-10 inline-flex items-center hover:text-[var(--forest)]">
             Brand Kits
           </Link>
-          <Link href="/gallery" className="hidden hover:text-[var(--forest)] sm:inline">
+          <Link href="/gallery" className="min-h-10 inline-flex items-center hover:text-[var(--forest)]">
             Gallery
           </Link>
-          <Link href="/pricing" className="hidden hover:text-[var(--forest)] md:inline">
+          <Link href="/pricing" className="min-h-10 inline-flex items-center hover:text-[var(--forest)]">
             Pricing
           </Link>
-          {email ? <span className="hidden text-black/45 md:inline">{email}</span> : null}
+          {email ? (
+            <span className="hidden max-w-[12rem] truncate text-black/55 md:inline" title={email}>
+              {email}
+            </span>
+          ) : null}
           <form action="/auth/signout" method="post">
-            <button className="btn btn-secondary px-3 py-2 text-xs" type="submit">
+            <button className="btn btn-secondary min-h-10 px-4 py-2 text-sm" type="submit">
               Sign out
             </button>
           </form>

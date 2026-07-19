@@ -61,100 +61,137 @@ export function ProjectStudio({
     setBusy(kind);
     setError(null);
     setMessage(null);
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectId: project.id,
-        count: 4,
-        kind,
-        idempotencyKey: `${kind}:${project.id}:${crypto.randomUUID()}`,
-      }),
-    });
-    const json = await res.json();
-    setBusy(null);
-    if (!res.ok) {
-      setError(json.error ?? "Generation failed");
-      return;
+    try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setError("You appear to be offline. Reconnect and try again.");
+        return;
+      }
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          count: 4,
+          kind,
+          idempotencyKey: `${kind}:${project.id}:${crypto.randomUUID()}`,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(
+          res.status === 401
+            ? "Your session expired. Sign in again to continue."
+            : (json.error ?? "Generation failed. Please try again."),
+        );
+        return;
+      }
+      setMessage(
+        json.reused
+          ? "Reused an in-flight or completed job (no duplicate charge)."
+          : "Concepts generated.",
+      );
+      await reload();
+    } catch {
+      setError("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setBusy(null);
     }
-    setMessage(json.reused ? "Reused an in-flight or completed job (no duplicate charge)." : "Concepts generated.");
-    await reload();
   }
 
   async function refine() {
     if (!focus || !refineText.trim()) return;
     setBusy("refine");
     setError(null);
-    const res = await fetch("/api/refine", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectId: project.id,
-        conceptId: focus.id,
-        instruction: refineText.trim(),
-        idempotencyKey: `refine:${focus.id}:${crypto.randomUUID()}`,
-      }),
-    });
-    const json = await res.json();
-    setBusy(null);
-    if (!res.ok) {
-      setError(json.error ?? "Refine failed");
-      return;
+    try {
+      const res = await fetch("/api/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          conceptId: focus.id,
+          instruction: refineText.trim(),
+          idempotencyKey: `refine:${focus.id}:${crypto.randomUUID()}`,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(
+          res.status === 401
+            ? "Your session expired. Sign in again to continue."
+            : (json.error ?? "Refine failed. Please try again."),
+        );
+        return;
+      }
+      setMessage("Refined concept created.");
+      setRefineText("");
+      await reload();
+    } catch {
+      setError("Could not refine this concept. Check your connection and try again.");
+    } finally {
+      setBusy(null);
     }
-    setMessage("Refined concept created.");
-    setRefineText("");
-    await reload();
   }
 
   async function selectFinal(conceptId: string) {
     setBusy("select");
     setError(null);
-    const res = await fetch("/api/select", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectId: project.id,
-        conceptId,
-        deliverToAleya: Boolean(project.aleya_business_id),
-      }),
-    });
-    const json = await res.json();
-    setBusy(null);
-    if (!res.ok) {
-      setError(json.error ?? "Could not save selection");
-      return;
-    }
-    setMessage(
-      json.delivery?.delivered
-        ? "Brand Kit saved and delivered to Aleya Invoicing."
-        : "Brand Kit saved. Open Brand Kits to edit or export.",
-    );
-    await reload();
-    if (json.brandKit?.id) {
-      window.location.href = `/brand-kits/${json.brandKit.id}`;
+    try {
+      const res = await fetch("/api/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          conceptId,
+          deliverToAleya: Boolean(project.aleya_business_id),
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(json.error ?? "Could not save selection");
+        return;
+      }
+      setMessage(
+        json.delivery?.delivered
+          ? "Brand Kit saved and delivered to Aleya Invoicing."
+          : "Brand Kit saved. Open Brand Kits to edit or export.",
+      );
+      await reload();
+      if (json.brandKit?.id) {
+        window.location.href = `/brand-kits/${json.brandKit.id}`;
+      }
+    } catch {
+      setError("Could not save the Brand Kit. Check your connection and try again.");
+    } finally {
+      setBusy(null);
     }
   }
 
   async function download(conceptId: string) {
     setBusy(`export:${conceptId}`);
-    const res = await fetch("/api/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conceptId }),
-    });
-    setBusy(null);
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "Export failed");
-      return;
+    setError(null);
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptId }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error ?? "Export failed. Some assets may be missing — try again.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aleya-logo-${conceptId.slice(0, 8)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Could not download the export pack. Check your connection and try again.");
+    } finally {
+      setBusy(null);
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `aleya-logo-${conceptId.slice(0, 8)}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   function toggleCompare(id: string) {
@@ -195,18 +232,30 @@ export function ProjectStudio({
         ) : null}
       </div>
 
-      {message ? <p className="rounded-xl bg-[var(--mist)] px-4 py-3 text-sm">{message}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-[var(--danger)]">{error}</p> : null}
+      {message ? (
+        <p className="rounded-xl bg-[var(--mist)] px-4 py-3 text-sm" role="status">
+          {message}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Preview mode">
         <button
+          type="button"
           className={`btn ${previewMode === "light" ? "btn-primary" : "btn-secondary"}`}
+          aria-pressed={previewMode === "light"}
           onClick={() => setPreviewMode("light")}
         >
           Light preview
         </button>
         <button
+          type="button"
           className={`btn ${previewMode === "dark" ? "btn-primary" : "btn-secondary"}`}
+          aria-pressed={previewMode === "dark"}
           onClick={() => setPreviewMode("dark")}
         >
           Dark preview
@@ -242,6 +291,7 @@ export function ProjectStudio({
                 <div
                   className="flex min-h-56 items-center justify-center p-6"
                   style={{ background: previewMode === "light" ? "#F7F4EF" : "#121212" }}
+                  aria-label={`${concept.title} logo preview`}
                   dangerouslySetInnerHTML={{
                     __html: concept.svg_markup ?? "<p>No preview</p>",
                   }}
@@ -257,18 +307,24 @@ export function ProjectStudio({
                 </div>
               </button>
               <div className="flex flex-wrap gap-2 border-t border-black/5 px-4 py-3">
-                <button className="btn btn-secondary px-3 py-2 text-xs" onClick={() => toggleCompare(concept.id)}>
+                <button
+                  type="button"
+                  className="btn btn-secondary min-h-10 px-3 py-2 text-sm"
+                  onClick={() => toggleCompare(concept.id)}
+                >
                   {selectedIds.includes(concept.id) ? "In compare" : "Compare"}
                 </button>
                 <button
-                  className="btn btn-secondary px-3 py-2 text-xs"
+                  type="button"
+                  className="btn btn-secondary min-h-10 px-3 py-2 text-sm"
                   disabled={Boolean(busy)}
                   onClick={() => download(concept.id)}
                 >
                   Download
                 </button>
                 <button
-                  className="btn btn-primary px-3 py-2 text-xs"
+                  type="button"
+                  className="btn btn-primary min-h-10 px-3 py-2 text-sm"
                   disabled={Boolean(busy)}
                   onClick={() => selectFinal(concept.id)}
                 >
@@ -321,14 +377,23 @@ export function ProjectStudio({
         <section className="panel rounded-2xl p-5">
           <h2 className="text-xl">Refine “{focus.title}”</h2>
           <p className="mt-1 text-sm text-black/55">{focus.prompt}</p>
-          <textarea
-            className="mt-4 w-full rounded-xl border border-black/10 bg-white/70 p-3"
-            rows={3}
-            value={refineText}
-            onChange={(e) => setRefineText(e.target.value)}
-            placeholder="Make the mark sharper, reduce detail, strengthen the monogram…"
-          />
-          <button className="btn btn-primary mt-3" disabled={Boolean(busy) || !refineText.trim()} onClick={refine}>
+          <label className="field mt-4">
+            <span className="sr-only">Refine instruction</span>
+            <textarea
+              className="w-full rounded-xl border border-black/10 bg-white/70 p-3"
+              rows={3}
+              value={refineText}
+              onChange={(e) => setRefineText(e.target.value)}
+              aria-label="Refine instruction"
+              placeholder="Make the mark sharper, reduce detail, strengthen the monogram…"
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn-primary mt-3"
+            disabled={Boolean(busy) || !refineText.trim()}
+            onClick={refine}
+          >
             {busy === "refine" ? "Refining…" : "Refine concept"}
           </button>
         </section>

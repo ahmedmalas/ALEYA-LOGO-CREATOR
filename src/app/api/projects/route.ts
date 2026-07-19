@@ -1,6 +1,13 @@
 import { ensureWorkspace } from "@/lib/auth/workspace";
+import {
+  INTEGRATION_COOKIE,
+  decodeIntegrationClaims,
+} from "@/lib/integration/claims";
+import { handleRouteError, jsonError, readJson } from "@/lib/security/api";
+import { sanitizeColorList } from "@/lib/security/colors";
 import { createClient } from "@/lib/supabase/server";
 import { LOGO_STYLES, LAYOUTS, PERSONALITIES, TYPOGRAPHY_DIRECTIONS } from "@/types/logo";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -10,12 +17,12 @@ const createSchema = z.object({
   industry: z.string().min(1).max(80),
   personality: z.enum(PERSONALITIES),
   style: z.enum(LOGO_STYLES),
-  preferredColors: z.array(z.string()).default([]),
-  avoidColors: z.array(z.string()).default([]),
+  preferredColors: z.array(z.string()).max(12).default([]),
+  avoidColors: z.array(z.string()).max(12).default([]),
   iconIdeas: z.string().max(500).optional(),
   typographyDirection: z.enum(TYPOGRAPHY_DIRECTIONS),
   layoutDirection: z.enum(LAYOUTS),
-  aleyaBusinessId: z.string().optional(),
+  aleyaBusinessId: z.string().max(120).optional(),
   aleyaReturnUrl: z.string().url().optional(),
 });
 
@@ -24,7 +31,7 @@ export async function GET() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return jsonError("Unauthorized", 401);
 
   const { data, error } = await supabase
     .from("logo_projects")
@@ -32,42 +39,74 @@ export async function GET() {
     .eq("owner_id", user.id)
     .order("updated_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return jsonError("Could not load projects", 500);
   return NextResponse.json({ projects: data });
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return jsonError("Unauthorized", 401);
 
-  const body = createSchema.parse(await request.json());
-  const workspace = await ensureWorkspace(supabase, user.id);
+    const body = await readJson(request, createSchema);
+    const workspace = await ensureWorkspace(supabase, user.id);
 
-  const { data, error } = await supabase
-    .from("logo_projects")
-    .insert({
-      workspace_id: workspace.id,
-      owner_id: user.id,
-      business_name: body.businessName,
-      tagline: body.tagline ?? null,
-      industry: body.industry,
-      personality: body.personality,
-      style: body.style,
-      preferred_colors: body.preferredColors,
-      avoid_colors: body.avoidColors,
-      icon_ideas: body.iconIdeas ?? null,
-      typography_direction: body.typographyDirection,
-      layout_direction: body.layoutDirection,
-      aleya_business_id: body.aleyaBusinessId ?? null,
-      aleya_return_url: body.aleyaReturnUrl ?? null,
-      status: "draft",
-    })
-    .select("*")
-    .single();
+    const cookieStore = await cookies();
+    const claims = decodeIntegrationClaims(cookieStore.get(INTEGRATION_COOKIE)?.value);
+    let aleyaBusinessId: string | null = null;
+    let aleyaReturnUrl: string | null = null;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ project: data }, { status: 201 });
+    if (claims) {
+      // Only verified integration claims may bind an Aleya business.
+      if (
+        body.aleyaBusinessId &&
+        body.aleyaBusinessId !== claims.businessId
+      ) {
+        return jsonError("Aleya business id does not match verified handoff", 400);
+      }
+      if (body.aleyaReturnUrl && body.aleyaReturnUrl !== claims.returnUrl) {
+        return jsonError("Aleya return URL does not match verified handoff", 400);
+      }
+      aleyaBusinessId = claims.businessId;
+      aleyaReturnUrl = claims.returnUrl;
+    } else if (body.aleyaBusinessId || body.aleyaReturnUrl) {
+      return jsonError(
+        "Aleya handoff must be validated before linking a business. Open Logo Creator from Aleya Invoicing.",
+        400,
+      );
+    }
+
+    const preferredColors = sanitizeColorList(body.preferredColors);
+    const avoidColors = sanitizeColorList(body.avoidColors);
+
+    const { data, error } = await supabase
+      .from("logo_projects")
+      .insert({
+        workspace_id: workspace.id,
+        owner_id: user.id,
+        business_name: body.businessName,
+        tagline: body.tagline ?? null,
+        industry: body.industry,
+        personality: body.personality,
+        style: body.style,
+        preferred_colors: preferredColors,
+        avoid_colors: avoidColors,
+        icon_ideas: body.iconIdeas ?? null,
+        typography_direction: body.typographyDirection,
+        layout_direction: body.layoutDirection,
+        aleya_business_id: aleyaBusinessId,
+        aleya_return_url: aleyaReturnUrl,
+        status: "draft",
+      })
+      .select("*")
+      .single();
+
+    if (error) return jsonError("Could not create project", 500);
+    return NextResponse.json({ project: data }, { status: 201 });
+  } catch (error) {
+    return handleRouteError(error, "Could not create project");
+  }
 }

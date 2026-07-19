@@ -40,7 +40,7 @@ export default function PricingPage() {
                 <h2 className="text-3xl">{plan.name}</h2>
                 <p className="text-3xl font-semibold text-[var(--forest-deep)]">
                   {plan.priceLabel}
-                  <span className="ml-2 text-sm font-normal text-black/45">{plan.priceNote}</span>
+                    <span className="ml-2 text-sm font-normal text-black/55">{plan.priceNote}</span>
                 </p>
               </div>
               <p className="mt-3 text-black/60">{plan.description}</p>
@@ -80,17 +80,23 @@ export default function PricingPage() {
           <div className="mt-6 overflow-x-auto">
             <table className="w-full min-w-[32rem] text-left text-sm">
               <thead>
-                <tr className="border-b border-black/10 text-black/45">
-                  <th className="py-3 font-medium">Capability</th>
-                  <th className="py-3 font-medium">Free</th>
-                  <th className="py-3 font-medium">Pro</th>
+                <tr className="border-b border-black/10 text-black/55">
+                  <th scope="col" className="py-3 font-medium">
+                    Capability
+                  </th>
+                  <th scope="col" className="py-3 font-medium">
+                    Free
+                  </th>
+                  <th scope="col" className="py-3 font-medium">
+                    Pro
+                  </th>
                 </tr>
               </thead>
               <tbody className="text-black/70">
                 <tr className="border-b border-black/6">
                   <td className="py-3">Logo generations</td>
-                  <td className="py-3">20 / hour</td>
-                  <td className="py-3">200 / hour</td>
+                  <td className="py-3">20 / hour (enforced)</td>
+                  <td className="py-3">200 / hour (planned)</td>
                 </tr>
                 <tr className="border-b border-black/6">
                   <td className="py-3">Concepts per generation</td>
@@ -99,13 +105,13 @@ export default function PricingPage() {
                 </tr>
                 <tr className="border-b border-black/6">
                   <td className="py-3">Brand Kit ZIP exports</td>
-                  <td className="py-3">3 / day</td>
-                  <td className="py-3">Unlimited</td>
+                  <td className="py-3">SVG + PNG pack</td>
+                  <td className="py-3">Higher throughput (planned)</td>
                 </tr>
                 <tr className="border-b border-black/6">
-                  <td className="py-3">Active Brand Kits</td>
-                  <td className="py-3">1</td>
-                  <td className="py-3">Unlimited</td>
+                  <td className="py-3">Brand Kits</td>
+                  <td className="py-3">Editable kits included</td>
+                  <td className="py-3">Same + planned priority queue</td>
                 </tr>
                 <tr>
                   <td className="py-3">Payments</td>

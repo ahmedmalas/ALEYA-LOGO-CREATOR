@@ -32,6 +32,8 @@ export async function updateSession(request: NextRequest) {
     path === "/" ||
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
+    path.startsWith("/forgot-password") ||
+    path.startsWith("/reset-password") ||
     path.startsWith("/gallery") ||
     path.startsWith("/pricing") ||
     path.startsWith("/auth") ||
@@ -43,13 +45,13 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/health") ||
     path.startsWith("/api/integrate/validate");
 
-  if (!user && !isPublic && !path.startsWith("/api/integrate/launch")) {
+  if (!user && !isPublic) {
     if (path.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", path);
+    url.searchParams.set("next", `${path}${request.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
 

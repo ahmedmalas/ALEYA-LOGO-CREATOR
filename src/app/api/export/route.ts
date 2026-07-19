@@ -1,3 +1,4 @@
+import { handleRouteError, jsonError, readJson } from "@/lib/security/api";
 import { createClient } from "@/lib/supabase/server";
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
@@ -16,82 +17,94 @@ async function downloadFile(supabase: Awaited<ReturnType<typeof createClient>>, 
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return jsonError("Unauthorized", 401);
 
-  const body = schema.parse(await request.json());
-  let conceptId = body.conceptId;
+    const body = await readJson(request, schema);
+    let conceptId = body.conceptId;
 
-  if (body.brandKitId) {
-    const { data: kit } = await supabase
-      .from("brand_kits")
+    if (body.brandKitId) {
+      const { data: kit } = await supabase
+        .from("brand_kits")
+        .select("*")
+        .eq("id", body.brandKitId)
+        .eq("owner_id", user.id)
+        .single();
+      if (!kit) return jsonError("Brand kit not found", 404);
+      conceptId = kit.concept_id;
+    }
+
+    if (!conceptId) return jsonError("conceptId or brandKitId required", 400);
+
+    const { data: concept } = await supabase
+      .from("logo_concepts")
       .select("*")
-      .eq("id", body.brandKitId)
+      .eq("id", conceptId)
       .eq("owner_id", user.id)
       .single();
-    if (!kit) return NextResponse.json({ error: "Brand kit not found" }, { status: 404 });
-    conceptId = kit.concept_id;
-  }
+    if (!concept) return jsonError("Concept not found", 404);
 
-  if (!conceptId) return NextResponse.json({ error: "conceptId or brandKitId required" }, { status: 400 });
+    const zip = new JSZip();
+    const files: Array<[string, string | null]> = [
+      ["logo-transparent.png", concept.transparent_png_path],
+      ["logo-hires.png", concept.png_path],
+      ["logo-icon.png", concept.icon_path],
+      ["logo-horizontal.png", concept.horizontal_path],
+      ["logo-stacked.png", concept.stacked_path],
+      ["logo-mono.png", concept.monochrome_path],
+      ["preview-light.png", concept.light_preview_path],
+      ["preview-dark.png", concept.dark_preview_path],
+    ];
 
-  const { data: concept } = await supabase
-    .from("logo_concepts")
-    .select("*")
-    .eq("id", conceptId)
-    .eq("owner_id", user.id)
-    .single();
-  if (!concept) return NextResponse.json({ error: "Concept not found" }, { status: 404 });
+    if (concept.svg_markup) {
+      zip.file("logo.svg", concept.svg_markup);
+    }
 
-  const zip = new JSZip();
-  const files: Array<[string, string | null]> = [
-    ["logo.svg", concept.svg_markup ? null : null],
-    ["logo-transparent.png", concept.transparent_png_path],
-    ["logo-hires.png", concept.png_path],
-    ["logo-icon.png", concept.icon_path],
-    ["logo-horizontal.png", concept.horizontal_path],
-    ["logo-stacked.png", concept.stacked_path],
-    ["logo-mono.png", concept.monochrome_path],
-    ["preview-light.png", concept.light_preview_path],
-    ["preview-dark.png", concept.dark_preview_path],
-  ];
+    let assetCount = concept.svg_markup ? 1 : 0;
+    for (const [name, path] of files) {
+      if (!path) continue;
+      const buf = await downloadFile(supabase, path);
+      if (buf) {
+        zip.file(name, buf);
+        assetCount += 1;
+      }
+    }
 
-  if (concept.svg_markup) {
-    zip.file("logo.svg", concept.svg_markup);
-  }
+    if (assetCount === 0) {
+      return jsonError("No exportable assets found for this concept", 404);
+    }
 
-  for (const [name, path] of files) {
-    if (!path) continue;
-    const buf = await downloadFile(supabase, path);
-    if (buf) zip.file(name, buf);
-  }
+    zip.file(
+      "metadata.json",
+      JSON.stringify(
+        {
+          title: concept.title,
+          prompt: concept.prompt,
+          iconConcept: concept.icon_concept,
+          layout: concept.layout,
+          palette: concept.palette,
+          typography: concept.typography,
+          provider: concept.provider,
+          createdAt: concept.created_at,
+        },
+        null,
+        2,
+      ),
+    );
 
-  zip.file(
-    "metadata.json",
-    JSON.stringify(
-      {
-        title: concept.title,
-        prompt: concept.prompt,
-        iconConcept: concept.icon_concept,
-        layout: concept.layout,
-        palette: concept.palette,
-        typography: concept.typography,
-        provider: concept.provider,
-        createdAt: concept.created_at,
+    const content = await zip.generateAsync({ type: "uint8array" });
+    return new NextResponse(Buffer.from(content), {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="aleya-logo-${conceptId.slice(0, 8)}.zip"`,
+        "Cache-Control": "no-store",
       },
-      null,
-      2,
-    ),
-  );
-
-  const content = await zip.generateAsync({ type: "uint8array" });
-  return new NextResponse(Buffer.from(content), {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="aleya-logo-${conceptId.slice(0, 8)}.zip"`,
-    },
-  });
+    });
+  } catch (error) {
+    return handleRouteError(error, "Export failed");
+  }
 }
