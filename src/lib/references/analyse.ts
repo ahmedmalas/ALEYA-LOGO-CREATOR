@@ -6,6 +6,7 @@ import {
   type ReferenceAnalysis,
 } from "@/lib/references/analysis-types";
 import { REFERENCE_BUCKET, type ProjectReferenceRow } from "@/lib/references/service";
+import { PDF_NO_CONTENT_MESSAGE, preparePdfForAnalysis } from "@/lib/references/pdf";
 import {
   analyseImageWithVision,
   getVisionConfig,
@@ -83,28 +84,48 @@ export async function analyseProjectReference(input: {
     let pdfPages: number[] = [];
 
     if (isPdf) {
-      // PDFs: use extracted text + a rendered notice page list. Full page rasterization
-      // requires a PDF renderer not bundled here; we still mark processed pages honestly.
-      pdfPages = inferPdfPagesFromText(reference.extracted_text);
-      if (!reference.extracted_text?.trim()) {
-        throw new Error(
-          "PDF text/image extraction produced no content to analyse. Add a note or upload an image page.",
-        );
+      const prepared = await preparePdfForAnalysis(buffer);
+      // Prefer freshly extracted text; fall back to upload-time extraction.
+      const pdfText = prepared.text?.trim() || reference.extracted_text?.trim() || null;
+      pdfPages = prepared.pagesProcessed.length
+        ? prepared.pagesProcessed
+        : inferPdfPagesFromText(pdfText);
+
+      if (!prepared.hasContent && !pdfText) {
+        throw new Error(PDF_NO_CONTENT_MESSAGE);
       }
-      // Build a simple text placard image so the vision model still receives an image payload
-      // representing extracted PDF content (pages listed).
-      const sharp = (await import("sharp")).default;
-      const text = reference.extracted_text.slice(0, 1800).replace(/[<>&]/g, " ");
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280">
-        <rect width="100%" height="100%" fill="#f7f3ea"/>
-        <text x="48" y="64" font-size="28" fill="#1f4d45">PDF pages ${pdfPages.join(", ")}</text>
-        <foreignObject x="48" y="96" width="928" height="1120">
-          <div xmlns="http://www.w3.org/1999/xhtml" style="font:20px sans-serif;color:#222;white-space:pre-wrap">${text}</div>
-        </foreignObject>
-      </svg>`;
-      const png = await sharp(Buffer.from(svg)).png().toBuffer();
-      mimeType = "image/png";
-      base64 = png.toString("base64");
+
+      if (prepared.pagePng) {
+        // Rasterized first page (text, scanned/image-only, or vector artwork).
+        mimeType = "image/png";
+        base64 = prepared.pagePng.toString("base64");
+      } else if (pdfText) {
+        // Text exists but rasterization failed — send an honest text placard.
+        const sharp = (await import("sharp")).default;
+        const text = pdfText.slice(0, 1800).replace(/[<>&]/g, " ");
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280">
+          <rect width="100%" height="100%" fill="#f7f3ea"/>
+          <text x="48" y="64" font-size="28" fill="#1f4d45">PDF pages ${pdfPages.join(", ")}</text>
+          <foreignObject x="48" y="96" width="928" height="1120">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="font:20px sans-serif;color:#222;white-space:pre-wrap">${text}</div>
+          </foreignObject>
+        </svg>`;
+        const png = await sharp(Buffer.from(svg)).png().toBuffer();
+        mimeType = "image/png";
+        base64 = png.toString("base64");
+      } else {
+        throw new Error(PDF_NO_CONTENT_MESSAGE);
+      }
+
+      // Keep extracted text in sync for prompt hints when upload-time parse missed it.
+      if (pdfText && pdfText !== reference.extracted_text) {
+        await supabase
+          .from("project_references")
+          .update({ extracted_text: pdfText, updated_at: new Date().toISOString() })
+          .eq("id", reference.id)
+          .eq("owner_id", ownerId);
+        reference.extracted_text = pdfText;
+      }
     } else if (isSvg) {
       const raster = await rasterizeSvgToPngBase64(buffer);
       mimeType = raster.mimeType;

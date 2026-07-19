@@ -188,7 +188,7 @@ export async function analyseImageWithVision(input: {
 /** Heuristic PDF page list when only text extraction is available. */
 export function inferPdfPagesFromText(text: string | null | undefined): number[] {
   if (!text?.trim()) return [1];
-  // pdf-parse does not always expose page breaks; treat as page 1 unless form-feed markers exist.
+  // Prefer form-feed markers when present; otherwise treat as a single analysed page.
   const pages = text.split("\f").length;
   return Array.from({ length: Math.max(1, Math.min(pages, 5)) }, (_, i) => i + 1);
 }

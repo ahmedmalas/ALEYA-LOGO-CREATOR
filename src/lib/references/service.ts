@@ -75,18 +75,8 @@ export async function listProjectReferences(
 }
 
 async function extractPdfText(buffer: Buffer): Promise<string | null> {
-  try {
-    // pdf-parse is CJS; default export is the parser function.
-    const mod = await import("pdf-parse");
-    const pdfParse =
-      (mod as { default?: (b: Buffer) => Promise<{ text?: string }> }).default ??
-      (mod as unknown as (b: Buffer) => Promise<{ text?: string }>);
-    const parsed = await pdfParse(buffer);
-    const text = (parsed.text ?? "").replace(/\s+/g, " ").trim().slice(0, 4000);
-    return text || null;
-  } catch {
-    return null;
-  }
+  const { extractPdfText: extract } = await import("@/lib/references/pdf");
+  return extract(buffer);
 }
 
 function inferKind(mime: string, filename: string): string {
