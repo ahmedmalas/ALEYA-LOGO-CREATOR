@@ -51,9 +51,9 @@ const COMPARISON: { label: string; free: string; pro: string }[] = (() => {
     { label: "Unused allowance rollover", free: free.unusedAllowanceRollover, pro: pro.unusedAllowanceRollover },
     { label: "Payment method required", free: free.paymentMethodRequired ? "Yes" : "No", pro: pro.paymentMethodRequired ? "Yes (when billing is live)" : "No" },
     {
-      label: "Checkout status",
+      label: "Billing availability",
       free: "Available now",
-      pro: BILLING_PROVIDER_CONNECTED ? "Paid checkout available" : "Waitlist — billing not connected",
+      pro: BILLING_PROVIDER_CONNECTED ? "Paid billing available" : "Waitlist — billing not connected",
     },
   ];
 })();
