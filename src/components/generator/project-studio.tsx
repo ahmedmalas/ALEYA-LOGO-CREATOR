@@ -46,6 +46,8 @@ export function ProjectStudio({
     () => concepts.find((c) => c.id === focusId) ?? concepts[0] ?? null,
     [concepts, focusId],
   );
+  const hasConcepts = concepts.length > 0;
+  const showHeaderGenerateActions = hasConcepts;
 
   async function reload() {
     const res = await fetch(`/api/projects/${project.id}`);
@@ -171,14 +173,26 @@ export function ProjectStudio({
             {project.tagline ? ` · ${project.tagline}` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button className="btn btn-primary" disabled={Boolean(busy)} onClick={() => generate("generate")}>
-            {busy === "generate" ? "Generating…" : "Generate concepts"}
-          </button>
-          <button className="btn btn-secondary" disabled={Boolean(busy)} onClick={() => generate("regenerate")}>
-            Regenerate
-          </button>
-        </div>
+        {showHeaderGenerateActions ? (
+          <div className="flex flex-wrap gap-2" data-testid="header-generate-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={Boolean(busy)}
+              onClick={() => generate("generate")}
+            >
+              {busy === "generate" ? "Generating…" : "Generate concepts"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={Boolean(busy)}
+              onClick={() => generate("regenerate")}
+            >
+              {busy === "regenerate" ? "Regenerating…" : "Regenerate"}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {message ? <p className="rounded-xl bg-[var(--mist)] px-4 py-3 text-sm">{message}</p> : null}
@@ -266,14 +280,20 @@ export function ProjectStudio({
         </div>
       ) : null}
 
-      {concepts.length === 0 && !busy ? (
-        <div className="panel rounded-3xl p-8 md:p-10">
+      {!hasConcepts && !busy ? (
+        <div className="panel rounded-3xl p-8 md:p-10" data-testid="empty-generate-state">
           <h2 className="text-xl">Ready to generate</h2>
           <p className="mt-2 max-w-xl text-black/60">
             Your brief is saved. Generate four distinct directions, then compare, refine, and select
             a final mark to create a Brand Kit.
           </p>
-          <button className="btn btn-primary mt-6" disabled={Boolean(busy)} onClick={() => generate("generate")}>
+          <button
+            type="button"
+            className="btn btn-primary mt-6"
+            disabled={Boolean(busy)}
+            onClick={() => generate("generate")}
+            data-testid="empty-generate-button"
+          >
             Generate concepts
           </button>
         </div>
