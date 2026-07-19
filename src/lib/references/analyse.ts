@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { analyseInvoiceDocument } from "@/lib/invoice/analyse-invoice";
 import {
   emptyAnalysis,
   referenceAnalysisSchema,
@@ -12,6 +13,20 @@ import {
   getVisionConfig,
   inferPdfPagesFromText,
 } from "@/lib/references/vision";
+
+function isInvoiceReference(reference: ProjectReferenceRow): boolean {
+  const kind = `${reference.kind || ""}`.toLowerCase();
+  const name = `${reference.original_filename || ""}`.toLowerCase();
+  // Only explicit invoice/receipt signals — do not treat every PDF "document" as an invoice
+  // (logo reference PDFs still use the logo vision path).
+  return (
+    kind === "receipt" ||
+    name.includes("invoice") ||
+    name.includes("tax-invoice") ||
+    name.includes("tax_invoice") ||
+    name.includes("receipt")
+  );
+}
 
 async function downloadReferenceBuffer(
   supabase: SupabaseClient,
@@ -134,6 +149,44 @@ export async function analyseProjectReference(input: {
       base64 = buffer.toString("base64");
     } else {
       throw new Error("Unsupported file type for visual analysis.");
+    }
+
+    // Invoices / receipts / documents → invoice reconstruction analysis (not logo mark).
+    if (isInvoiceReference(reference)) {
+      const invoiceAnalysis = await analyseInvoiceDocument({
+        text: reference.extracted_text || "",
+        mimeType,
+        base64,
+      });
+      const payload = {
+        documentType: "invoice" as const,
+        ...invoiceAnalysis,
+        // Keep logo-schema compat keys empty so generation does not treat this as a mark.
+        existingLogoText: "",
+        logoMark: "",
+        summary: invoiceAnalysis.summary,
+        pdfPagesProcessed: pdfPages,
+      };
+      const { data, error } = await supabase
+        .from("project_references")
+        .update({
+          analysis_status: "succeeded",
+          analysis_mode: "visual",
+          analysis_json: payload,
+          analysis_confirmed_json: reference.analysis_confirmed_json ?? payload,
+          analysis_provider: "aleya-invoice-analyser",
+          analysis_model: "invoice-v1",
+          analysis_error: null,
+          pdf_pages_processed: pdfPages,
+          analyzed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", reference.id)
+        .eq("owner_id", ownerId)
+        .select("*")
+        .single();
+      if (error || !data) throw new Error(error?.message || "Could not save invoice analysis");
+      return data as ProjectReferenceRow;
     }
 
     const result = await analyseImageWithVision({
