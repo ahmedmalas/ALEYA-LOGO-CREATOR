@@ -1,0 +1,813 @@
+From e157b1ed09219335c914c2cc1e2aabb06d0181e4 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sun, 19 Jul 2026 11:21:20 +0000
+Subject: [PATCH] Import ALEYA invoice templates and render templated PDFs
+
+Add aleya.invoiceTemplate import API, store the active template on invoice
+preferences, and route invoice PDF generation through the template layout
+when one is active so reconstructed designs produce real customer invoices.
+---
+ .../docs/INVOICE_TEMPLATE_INTERCHANGE.md      |  22 ++
+ .../scripts/proof-template-import.ts          | 137 +++++++++++
+ ai-invoicing-app-standalone/src/app.ts        |   2 +
+ .../src/domain/invoice-templates/schema.ts    |  87 +++++++
+ .../src/routes/invoice-templates.ts           |  86 +++++++
+ .../src/routes/invoices.ts                    |  32 ++-
+ .../src/services/template-invoice-pdf.ts      | 212 ++++++++++++++++++
+ .../unit/invoice-template-import.test.ts      | 134 +++++++++++
+ 8 files changed, 706 insertions(+), 6 deletions(-)
+ create mode 100644 ai-invoicing-app-standalone/docs/INVOICE_TEMPLATE_INTERCHANGE.md
+ create mode 100644 ai-invoicing-app-standalone/scripts/proof-template-import.ts
+ create mode 100644 ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts
+ create mode 100644 ai-invoicing-app-standalone/src/routes/invoice-templates.ts
+ create mode 100644 ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
+ create mode 100644 ai-invoicing-app-standalone/tests/unit/invoice-template-import.test.ts
+
+diff --git a/ai-invoicing-app-standalone/docs/INVOICE_TEMPLATE_INTERCHANGE.md b/ai-invoicing-app-standalone/docs/INVOICE_TEMPLATE_INTERCHANGE.md
+new file mode 100644
+index 0000000..c9752ac
+--- /dev/null
++++ b/ai-invoicing-app-standalone/docs/INVOICE_TEMPLATE_INTERCHANGE.md
+@@ -0,0 +1,22 @@
++# Invoice template interchange (ALEYA ↔ Aleya Invoicing)
++
++See the canonical contract in the ALEYA repository:
++
++`docs/invoice/TEMPLATE_INTERCHANGE_CONTRACT.md`
++
++## Import
++
++```
++POST /api/integrations/invoice-templates/import
++{ "template": { ...aleya.invoiceTemplate }, "activate": true }
++```
++
++## Active template
++
++```
++GET /api/integrations/invoice-templates/active
++DELETE /api/integrations/invoice-templates/active
++```
++
++When an active template is present, `GET /api/invoices/:id/pdf` renders through
++`generateTemplatedInvoicePdfBuffer` instead of the legacy fixed PDFKit layout.
+diff --git a/ai-invoicing-app-standalone/scripts/proof-template-import.ts b/ai-invoicing-app-standalone/scripts/proof-template-import.ts
+new file mode 100644
+index 0000000..5bc3332
+--- /dev/null
++++ b/ai-invoicing-app-standalone/scripts/proof-template-import.ts
+@@ -0,0 +1,137 @@
++/**
++ * Proof: import ALEYA template JSON → create invoice → generate PDF.
++ * Run from ai-invoicing-app-standalone: npx tsx scripts/proof-template-import.ts
++ */
++import { mkdir, readFile, writeFile } from 'node:fs/promises';
++import path from 'node:path';
++
++import { buildApp } from '../src/app.js';
++
++const OUT = '/opt/cursor/artifacts/invoice-pipeline/invoicing';
++
++async function main() {
++  await mkdir(OUT, { recursive: true });
++  const templatePath = process.argv[2] || '/opt/cursor/artifacts/invoice-pipeline/refine-template.json';
++  const template = JSON.parse(await readFile(templatePath, 'utf8'));
++
++  const app = await buildApp({
++    dbPath: path.join(OUT, 'proof.sqlite'),
++    authBypassForTesting: true,
++    enableStructuredLogging: false,
++    logLevel: 'error',
++  });
++  await app.ready();
++
++  await app.inject({
++    method: 'POST',
++    url: '/api/business-profile',
++    payload: {
++      companyName: 'Northwind Trading Co',
++      address: '12 Harbour Street, Sydney NSW 2000',
++      email: 'accounts@northwind.example',
++      phone: '+61 2 9000 1200',
++      abnTaxId: '12 345 678 901',
++      primaryColor: '#1F4D45',
++      secondaryColor: '#B08A4F',
++    },
++  });
++
++  const customerRes = await app.inject({
++    method: 'POST',
++    url: '/api/customers',
++    payload: {
++      displayName: 'Contoso Retail Pty Ltd',
++      email: 'ap@contoso.example',
++      address: '88 Market Road, Melbourne VIC 3000',
++    },
++  });
++  const customer = customerRes.json() as { id: string };
++
++  const importRes = await app.inject({
++    method: 'POST',
++    url: '/api/integrations/invoice-templates/import',
++    payload: { template, activate: true },
++  });
++  await writeFile(path.join(OUT, 'import-response.json'), importRes.body);
++  if (importRes.statusCode >= 300) {
++    throw new Error(`Import failed: ${importRes.statusCode} ${importRes.body}`);
++  }
++
++  const activeRes = await app.inject({ method: 'GET', url: '/api/integrations/invoice-templates/active' });
++  await writeFile(path.join(OUT, 'active-template.json'), activeRes.body);
++
++  const invoiceRes = await app.inject({
++    method: 'POST',
++    url: '/api/invoices',
++    payload: {
++      customerId: customer.id,
++      title: 'Shelving supply',
++      issueDate: '2026-07-01',
++      dueDate: '2026-07-31',
++      notes: 'Goods remain property of Northwind until paid in full.',
++      paymentTerms: 'Pay to Northwind Trading Co · BSB 062-000 Account 1234 5678',
++      lineItems: [
++        { description: 'Premium oak shelving unit', quantity: 4, unitPrice: 220, gstApplicable: true },
++        { description: 'Installation labour (half day)', quantity: 1, unitPrice: 480, gstApplicable: true },
++        { description: 'Protective packing materials', quantity: 2, unitPrice: 35, gstApplicable: true },
++      ],
++    },
++  });
++  const invoice = invoiceRes.json() as { id: string };
++  await app.inject({ method: 'POST', url: `/api/invoices/${invoice.id}/finalise` });
++
++  const pdfRes = await app.inject({ method: 'GET', url: `/api/invoices/${invoice.id}/pdf` });
++  if (pdfRes.statusCode !== 200 || !pdfRes.rawPayload.slice(0, 4).equals(Buffer.from('%PDF'))) {
++    throw new Error(`PDF failed: ${pdfRes.statusCode}`);
++  }
++  await writeFile(path.join(OUT, 'generated-invoice.pdf'), pdfRes.rawPayload);
++
++  // Dynamic swap proof — different customer/items
++  const customer2Res = await app.inject({
++    method: 'POST',
++    url: '/api/customers',
++    payload: {
++      displayName: 'Adventure Works Ltd',
++      email: 'billing@adventure.example',
++      address: '1 Innovation Way, Brisbane QLD 4000',
++    },
++  });
++  const customer2 = customer2Res.json() as { id: string };
++  const invoice2Res = await app.inject({
++    method: 'POST',
++    url: '/api/invoices',
++    payload: {
++      customerId: customer2.id,
++      title: 'Consulting',
++      issueDate: '2026-07-18',
++      dueDate: '2026-08-17',
++      notes: 'Net 30',
++      paymentTerms: 'Card or EFT',
++      lineItems: [
++        { description: 'Consulting day rate', quantity: 3, unitPrice: 900, gstApplicable: true },
++      ],
++    },
++  });
++  const invoice2 = invoice2Res.json() as { id: string };
++  await app.inject({ method: 'POST', url: `/api/invoices/${invoice2.id}/finalise` });
++  const pdf2 = await app.inject({ method: 'GET', url: `/api/invoices/${invoice2.id}/pdf` });
++  await writeFile(path.join(OUT, 'generated-invoice-swapped.pdf'), pdf2.rawPayload);
++
++  const summary = {
++    importStatus: importRes.statusCode,
++    activeStatus: activeRes.statusCode,
++    pdfBytes: pdfRes.rawPayload.length,
++    swappedPdfBytes: pdf2.rawPayload.length,
++    pdfPath: path.join(OUT, 'generated-invoice.pdf'),
++    swappedPdfPath: path.join(OUT, 'generated-invoice-swapped.pdf'),
++    ok: true,
++  };
++  await writeFile(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
++  console.log(JSON.stringify(summary, null, 2));
++  await app.close();
++}
++
++main().catch((err) => {
++  console.error(err);
++  process.exit(1);
++});
+diff --git a/ai-invoicing-app-standalone/src/app.ts b/ai-invoicing-app-standalone/src/app.ts
+index 3c2c356..df3e15d 100644
+--- a/ai-invoicing-app-standalone/src/app.ts
++++ b/ai-invoicing-app-standalone/src/app.ts
+@@ -10,6 +10,7 @@ import { customerRoutes } from './routes/customers.js';
+ import { businessProfileRoutes } from './routes/business-profile.js';
+ import { logoStudioRoutes } from './routes/logo-studio.js';
+ import { invoiceRoutes } from './routes/invoices.js';
++import { invoiceTemplateRoutes } from './routes/invoice-templates.js';
+ import { quoteRoutes } from './routes/quotes.js';
+ import { jobRoutes } from './routes/jobs.js';
+ import { roleRoutes } from './routes/roles.js';
+@@ -885,6 +886,7 @@ export async function buildApp(options: BuildAppOptions) {
+     businessProfileRoutes,
+     logoStudioRoutes,
+     preferenceRoutes,
++    invoiceTemplateRoutes,
+     invoiceRoutes,
+     quoteRoutes,
+     jobRoutes,
+diff --git a/ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts b/ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts
+new file mode 100644
+index 0000000..ca648b2
+--- /dev/null
++++ b/ai-invoicing-app-standalone/src/domain/invoice-templates/schema.ts
+@@ -0,0 +1,87 @@
++import { z } from 'zod';
++
++export const INVOICE_TEMPLATE_FORMAT = 'aleya.invoiceTemplate' as const;
++export const INVOICE_TEMPLATE_VERSION = '1.0.0' as const;
++
++export const invoiceTemplateSchema = z.object({
++  format: z.literal(INVOICE_TEMPLATE_FORMAT),
++  version: z.string(),
++  page: z.object({
++    size: z.enum(['A4', 'Letter']).default('A4'),
++    orientation: z.enum(['portrait', 'landscape']).default('portrait'),
++    widthPt: z.number().default(595.28),
++    heightPt: z.number().default(841.89),
++    margins: z.object({
++      top: z.number(),
++      right: z.number(),
++      bottom: z.number(),
++      left: z.number(),
++    }),
++  }),
++  theme: z.object({
++    primaryColor: z.string(),
++    secondaryColor: z.string(),
++    textColor: z.string(),
++    mutedColor: z.string(),
++    borderColor: z.string(),
++    backgroundColor: z.string(),
++    fontFamily: z.string(),
++    headingFontFamily: z.string(),
++  }),
++  regions: z.array(
++    z.object({
++      id: z.string(),
++      type: z.string(),
++      label: z.string().default(''),
++      bounds: z.object({
++        x: z.number(),
++        y: z.number(),
++        width: z.number(),
++        height: z.number(),
++      }),
++      style: z
++        .object({
++          fontFamily: z.string().optional(),
++          fontSize: z.number().optional(),
++          fontWeight: z.enum(['normal', 'bold']).optional(),
++          color: z.string().optional(),
++          align: z.enum(['left', 'center', 'right']).optional(),
++          background: z.string().optional(),
++          borderColor: z.string().optional(),
++          borderWidth: z.number().optional(),
++        })
++        .default({}),
++      binding: z.string().default(''),
++      editable: z.boolean().default(true),
++    }),
++  ),
++  table: z.object({
++    regionId: z.string().default('line-items'),
++    columns: z.array(
++      z.object({
++        id: z.string(),
++        header: z.string(),
++        binding: z.string(),
++        width: z.number(),
++        align: z.enum(['left', 'center', 'right']).default('left'),
++      }),
++    ),
++    headerBackground: z.string().default('#F3F4F6'),
++    rowBorderColor: z.string().default('#E5E7EB'),
++  }),
++  variables: z.array(z.string()).default([]),
++  sampleData: z.record(z.string(), z.unknown()).optional(),
++  sourceMode: z.enum(['mirror', 'refine', 'advance']).optional(),
++  analysis: z.record(z.string(), z.unknown()).optional(),
++  assets: z
++    .object({
++      logo: z.string().optional(),
++    })
++    .default({}),
++});
++
++export type InvoiceTemplate = z.infer<typeof invoiceTemplateSchema>;
++
++export function parseInvoiceTemplate(raw: unknown): InvoiceTemplate {
++  return invoiceTemplateSchema.parse(raw);
++}
+diff --git a/ai-invoicing-app-standalone/src/routes/invoice-templates.ts b/ai-invoicing-app-standalone/src/routes/invoice-templates.ts
+new file mode 100644
+index 0000000..e298a12
+--- /dev/null
++++ b/ai-invoicing-app-standalone/src/routes/invoice-templates.ts
+@@ -0,0 +1,86 @@
++import type { FastifyPluginAsync } from 'fastify';
++import { z } from 'zod';
++
++import {
++  INVOICE_TEMPLATE_FORMAT,
++  parseInvoiceTemplate,
++} from '../domain/invoice-templates/schema.js';
++
++const importSchema = z.object({
++  template: z.unknown(),
++  activate: z.boolean().default(true),
++});
++
++/**
++ * Import / activate ALEYA invoice template packages.
++ * Storage: preferences category `invoice` → `{ activeTemplate, importedAt, format }`.
++ */
++export const invoiceTemplateRoutes: FastifyPluginAsync = async (app) => {
++  app.post('/integrations/invoice-templates/import', async (request, reply) => {
++    const body = importSchema.parse(request.body);
++    const template = parseInvoiceTemplate(body.template);
++
++    const existing = ((await app.db.getPreference('invoice')) as Record<string, unknown> | null) ?? {};
++    const next = {
++      ...existing,
++      activeTemplate: template,
++      importedAt: new Date().toISOString(),
++      format: INVOICE_TEMPLATE_FORMAT,
++      version: template.version,
++      sourceMode: template.sourceMode ?? null,
++      activated: body.activate,
++    };
++    await app.db.upsertPreference('invoice', next);
++
++    // Also mirror brand colours onto business profile when present.
++    const profile = await app.db.getBusinessProfile();
++    if (profile) {
++      await app.db.upsertBusinessProfile({
++        companyName: profile.companyName,
++        legalName: profile.legalName ?? undefined,
++        abnTaxId: profile.abnTaxId ?? undefined,
++        address: profile.address ?? undefined,
++        email: profile.email ?? undefined,
++        phone: profile.phone ?? undefined,
++        logoReference: profile.logoReference ?? undefined,
++        primaryColor: template.theme.primaryColor || profile.primaryColor,
++        secondaryColor: template.theme.secondaryColor || profile.secondaryColor,
++      });
++    }
++
++    return reply.code(201).send({
++      message: 'Invoice template imported',
++      format: template.format,
++      version: template.version,
++      sourceMode: template.sourceMode,
++      regionCount: template.regions.length,
++      activated: body.activate,
++    });
++  });
++
++  app.get('/integrations/invoice-templates/active', async (_request, reply) => {
++    const prefs = (await app.db.getPreference('invoice')) as Record<string, unknown> | null;
++    const template = prefs?.activeTemplate;
++    if (!template) {
++      return reply.code(404).send({ message: 'No active invoice template' });
++    }
++    return {
++      format: INVOICE_TEMPLATE_FORMAT,
++      importedAt: prefs?.importedAt ?? null,
++      sourceMode: prefs?.sourceMode ?? null,
++      template,
++    };
++  });
++
++  app.delete('/integrations/invoice-templates/active', async (_request, reply) => {
++    const existing = ((await app.db.getPreference('invoice')) as Record<string, unknown> | null) ?? {};
++    const { activeTemplate: _drop, ...rest } = existing;
++    await app.db.upsertPreference('invoice', {
++      ...rest,
++      activeTemplate: null,
++      activated: false,
++      clearedAt: new Date().toISOString(),
++    });
++    return reply.code(200).send({ message: 'Active invoice template cleared' });
++  });
++};
+diff --git a/ai-invoicing-app-standalone/src/routes/invoices.ts b/ai-invoicing-app-standalone/src/routes/invoices.ts
+index 206c93e..b233810 100644
+--- a/ai-invoicing-app-standalone/src/routes/invoices.ts
++++ b/ai-invoicing-app-standalone/src/routes/invoices.ts
+@@ -1,7 +1,12 @@
+ import { z } from 'zod';
+ import type { FastifyPluginAsync } from 'fastify';
+ 
++import { parseInvoiceTemplate } from '../domain/invoice-templates/schema.js';
+ import { generateInvoicePdfBuffer } from '../services/pdf-service.js';
++import {
++  generateTemplatedInvoicePdfBuffer,
++  hasUsableInvoiceTemplate,
++} from '../services/template-invoice-pdf.js';
+ import { parsePagination } from './pagination.js';
+ 
+ const lineItemSchema = z.object({
+@@ -88,12 +93,27 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
+     const frozenBranding =
+       invoice.status === 'Finalised' ? await app.db.getInvoiceBrandingSnapshot(invoice.id) : null;
+     const businessProfile = frozenBranding ?? (await app.db.getBusinessProfile());
+-    const pdfBuffer = await generateInvoicePdfBuffer({
+-      invoice,
+-      lineItems: invoice.lineItems,
+-      customer,
+-      businessProfile,
+-    });
++
++    // Prefer an imported ALEYA invoice template when one is active.
++    const invoicePrefs = (await app.db.getPreference('invoice')) as Record<string, unknown> | null;
++    let pdfBuffer: Buffer;
++    if (invoicePrefs?.activated !== false && hasUsableInvoiceTemplate(invoicePrefs?.activeTemplate)) {
++      const template = parseInvoiceTemplate(invoicePrefs.activeTemplate);
++      pdfBuffer = await generateTemplatedInvoicePdfBuffer({
++        template,
++        invoice,
++        lineItems: invoice.lineItems,
++        customer,
++        businessProfile,
++      });
++    } else {
++      pdfBuffer = await generateInvoicePdfBuffer({
++        invoice,
++        lineItems: invoice.lineItems,
++        customer,
++        businessProfile,
++      });
++    }
+ 
+     return reply
+       .code(200)
+diff --git a/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts b/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
+new file mode 100644
+index 0000000..598535f
+--- /dev/null
++++ b/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
+@@ -0,0 +1,212 @@
++import PDFDocument from 'pdfkit';
++
++import type { InvoiceTemplate } from '../domain/invoice-templates/schema.js';
++import type { BrandingProfile, Customer, InvoiceDraft, LineItemInput } from '../types/entities.js';
++import { drawBusinessLogoMark } from './logo-pdf.js';
++
++function money(n: number): string {
++  return n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
++}
++
++/**
++ * Render an invoice PDF using an imported ALEYA template layout.
++ * Falls back gracefully when regions are missing.
++ */
++export function generateTemplatedInvoicePdfBuffer(input: {
++  template: InvoiceTemplate;
++  invoice: InvoiceDraft;
++  lineItems: LineItemInput[];
++  customer: Customer;
++  businessProfile: BrandingProfile | null;
++}): Promise<Buffer> {
++  return new Promise((resolve, reject) => {
++    const pageSize = input.template.page.size === 'Letter' ? 'LETTER' : 'A4';
++    const doc = new PDFDocument({
++      size: pageSize,
++      margins: {
++        top: input.template.page.margins.top,
++        bottom: input.template.page.margins.bottom,
++        left: input.template.page.margins.left,
++        right: input.template.page.margins.right,
++      },
++    });
++    const chunks: Buffer[] = [];
++    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
++    doc.on('end', () => resolve(Buffer.concat(chunks)));
++    doc.on('error', (err) => reject(err));
++
++    const theme = input.template.theme;
++    const profile = input.businessProfile;
++    const primary = profile?.primaryColor || theme.primaryColor || '#1F4D45';
++    const text = theme.textColor || '#111827';
++    const muted = theme.mutedColor || '#6B7280';
++
++    // Logo
++    drawBusinessLogoMark(doc, profile, 420, 48, 48);
++
++    // Company
++    doc
++      .fillColor(primary)
++      .font('Helvetica-Bold')
++      .fontSize(20)
++      .text(profile?.companyName || 'Business Name', 48, 48, { width: 320 });
++    doc
++      .font('Helvetica')
++      .fontSize(10)
++      .fillColor(muted)
++      .text(
++        [profile?.address, profile?.email, profile?.phone, profile?.abnTaxId ? `ABN ${profile.abnTaxId}` : null]
++          .filter(Boolean)
++          .join('\n'),
++        48,
++        doc.y + 4,
++        { width: 320 },
++      );
++
++    // Title + meta (right)
++    doc
++      .fillColor(text)
++      .font('Helvetica-Bold')
++      .fontSize(18)
++      .text('TAX INVOICE', 360, 100, { width: 180, align: 'right' });
++    doc
++      .font('Helvetica')
++      .fontSize(10)
++      .text(
++        [
++          `Invoice: ${input.invoice.invoiceNumber ?? 'Draft'}`,
++          `Issue: ${input.invoice.issueDate}`,
++          `Due: ${input.invoice.dueDate}`,
++        ].join('\n'),
++        360,
++        126,
++        { width: 180, align: 'right' },
++      );
++
++    // Customer
++    doc
++      .fillColor(text)
++      .font('Helvetica-Bold')
++      .fontSize(11)
++      .text('Bill To', 48, 200);
++    doc
++      .font('Helvetica')
++      .fontSize(10)
++      .fillColor(text)
++      .text(
++        [input.customer.displayName, input.customer.address, input.customer.email]
++          .filter(Boolean)
++          .join('\n'),
++        48,
++        216,
++        { width: 260 },
++      );
++
++    // Table
++    const tableTop = 300;
++    const columns = input.template.table.columns;
++    let x = 48;
++    doc.rect(48, tableTop, 500, 22).fill(input.template.table.headerBackground || '#F3F4F6');
++    doc.fillColor(muted).fontSize(9).font('Helvetica-Bold');
++    for (const col of columns) {
++      doc.text(col.header, x, tableTop + 6, {
++        width: col.width,
++        align: col.align === 'right' ? 'right' : 'left',
++      });
++      x += col.width;
++    }
++
++    let y = tableTop + 28;
++    doc.font('Helvetica').fontSize(10).fillColor(text);
++    for (const item of input.lineItems) {
++      const lineSubtotal = item.quantity * item.unitPrice;
++      const lineGst = item.gstApplicable ? lineSubtotal * 0.1 : 0;
++      const lineTotal = lineSubtotal + lineGst;
++      const values: Record<string, string> = {
++        description: item.description,
++        quantity: String(item.quantity),
++        unitPrice: money(item.unitPrice),
++        tax: money(lineGst),
++        total: money(lineTotal),
++      };
++      x = 48;
++      for (const col of columns) {
++        doc.text(values[col.binding] ?? values[col.id] ?? '', x, y, {
++          width: col.width,
++          align: col.align === 'right' ? 'right' : 'left',
++        });
++        x += col.width;
++      }
++      doc
++        .strokeColor(input.template.table.rowBorderColor || '#E5E7EB')
++        .moveTo(48, y + 16)
++        .lineTo(548, y + 16)
++        .stroke();
++      y += 22;
++      if (y > 700) break;
++    }
++
++    // Totals
++    const totals = input.invoice.totals;
++    doc
++      .font('Helvetica')
++      .fontSize(11)
++      .fillColor(text)
++      .text(`Subtotal: ${money(totals.subtotal)}`, 360, Math.max(y + 20, 560), {
++        width: 180,
++        align: 'right',
++      });
++    doc.text(`GST: ${money(totals.gstTotal)}`, 360, doc.y + 2, { width: 180, align: 'right' });
++    doc
++      .font('Helvetica-Bold')
++      .fillColor(primary)
++      .fontSize(13)
++      .text(`Total: ${money(totals.total)}`, 360, doc.y + 4, { width: 180, align: 'right' });
++
++    // Notes / payment
++    if (input.invoice.notes) {
++      doc
++        .font('Helvetica-Bold')
++        .fontSize(11)
++        .fillColor(text)
++        .text('Notes', 48, 650);
++      doc.font('Helvetica').fontSize(10).fillColor(muted).text(input.invoice.notes, 48, 666, {
++        width: 300,
++      });
++    }
++    if (input.invoice.paymentTerms) {
++      doc
++        .font('Helvetica-Bold')
++        .fontSize(11)
++        .fillColor(text)
++        .text('Payment', 48, 720);
++      doc
++        .font('Helvetica')
++        .fontSize(10)
++        .fillColor(muted)
++        .text(input.invoice.paymentTerms, 48, 736, { width: 500 });
++    }
++
++    doc
++      .fontSize(9)
++      .fillColor(muted)
++      .text(
++        `${profile?.companyName ?? 'Business'} · Template ${input.template.sourceMode ?? 'imported'} · Aleya Invoicing`,
++        48,
++        800,
++        { width: 500, align: 'center' },
++      );
++
++    doc.end();
++  });
++}
++
++/** Convenience: use template when provided, else caller uses legacy generator. */
++export function hasUsableInvoiceTemplate(value: unknown): value is InvoiceTemplate {
++  return Boolean(
++    value &&
++      typeof value === 'object' &&
++      (value as { format?: string }).format === 'aleya.invoiceTemplate' &&
++      Array.isArray((value as { regions?: unknown }).regions),
++  );
++}
+diff --git a/ai-invoicing-app-standalone/tests/unit/invoice-template-import.test.ts b/ai-invoicing-app-standalone/tests/unit/invoice-template-import.test.ts
+new file mode 100644
+index 0000000..ca3afe3
+--- /dev/null
++++ b/ai-invoicing-app-standalone/tests/unit/invoice-template-import.test.ts
+@@ -0,0 +1,134 @@
++import { describe, expect, it } from 'vitest';
++
++import {
++  INVOICE_TEMPLATE_FORMAT,
++  parseInvoiceTemplate,
++} from '../../src/domain/invoice-templates/schema.js';
++import { generateTemplatedInvoicePdfBuffer } from '../../src/services/template-invoice-pdf.js';
++import type { BrandingProfile, Customer, InvoiceDraft, LineItemInput } from '../../src/types/entities.js';
++
++const sampleTemplate = {
++  format: INVOICE_TEMPLATE_FORMAT,
++  version: '1.0.0',
++  page: {
++    size: 'A4' as const,
++    orientation: 'portrait' as const,
++    widthPt: 595.28,
++    heightPt: 841.89,
++    margins: { top: 48, right: 48, bottom: 48, left: 48 },
++  },
++  theme: {
++    primaryColor: '#1F4D45',
++    secondaryColor: '#B08A4F',
++    textColor: '#111827',
++    mutedColor: '#6B7280',
++    borderColor: '#D1D5DB',
++    backgroundColor: '#FFFFFF',
++    fontFamily: 'Helvetica',
++    headingFontFamily: 'Helvetica-Bold',
++  },
++  regions: [
++    {
++      id: 'company',
++      type: 'company',
++      label: 'Company',
++      bounds: { x: 48, y: 48, width: 300, height: 80 },
++      style: {},
++      binding: '{{company.name}}',
++      editable: true,
++    },
++    {
++      id: 'line-items',
++      type: 'table',
++      label: 'Items',
++      bounds: { x: 48, y: 300, width: 500, height: 200 },
++      style: {},
++      binding: '{{items}}',
++      editable: true,
++    },
++  ],
++  table: {
++    regionId: 'line-items',
++    columns: [
++      { id: 'description', header: 'Description', binding: 'description', width: 220, align: 'left' as const },
++      { id: 'quantity', header: 'Qty', binding: 'quantity', width: 50, align: 'right' as const },
++      { id: 'unitPrice', header: 'Unit', binding: 'unitPrice', width: 70, align: 'right' as const },
++      { id: 'tax', header: 'GST', binding: 'tax', width: 60, align: 'right' as const },
++      { id: 'total', header: 'Total', binding: 'total', width: 70, align: 'right' as const },
++    ],
++    headerBackground: '#F3F4F6',
++    rowBorderColor: '#E5E7EB',
++  },
++  variables: ['{{company.name}}', '{{items}}', '{{total}}'],
++  sourceMode: 'refine' as const,
++  assets: {},
++};
++
++describe('invoice template import contract', () => {
++  it('parses aleya.invoiceTemplate v1 packages', () => {
++    const template = parseInvoiceTemplate(sampleTemplate);
++    expect(template.format).toBe('aleya.invoiceTemplate');
++    expect(template.regions.length).toBeGreaterThan(0);
++    expect(template.table.columns[0]?.binding).toBe('description');
++  });
++
++  it('renders a PDF from the imported template with dynamic invoice data', async () => {
++    const template = parseInvoiceTemplate(sampleTemplate);
++    const invoice: InvoiceDraft = {
++      id: '11111111-1111-1111-1111-111111111111',
++      customerId: '22222222-2222-2222-2222-222222222222',
++      title: 'Shelving',
++      issueDate: '2026-07-01',
++      dueDate: '2026-07-31',
++      notes: 'Goods remain property until paid.',
++      paymentTerms: 'Pay BSB 062-000 Acc 1234 5678',
++      invoiceNumber: 'INV-2026-0142',
++      status: 'Finalised',
++      paymentState: 'Awaiting Payment',
++      reminderState: 'None',
++      totals: { subtotal: 1430, gstTotal: 143, total: 1573 },
++      createdAt: new Date().toISOString(),
++      updatedAt: new Date().toISOString(),
++    };
++    const lineItems: LineItemInput[] = [
++      { description: 'Premium oak shelving unit', quantity: 4, unitPrice: 220, gstApplicable: true },
++      { description: 'Installation labour', quantity: 1, unitPrice: 480, gstApplicable: true },
++    ];
++    const customer: Customer = {
++      id: invoice.customerId,
++      displayName: 'Contoso Retail Pty Ltd',
++      email: 'ap@contoso.example',
++      phone: null,
++      address: '88 Market Road, Melbourne VIC 3000',
++      abnTaxId: null,
++      notes: null,
++      createdAt: invoice.createdAt,
++      updatedAt: invoice.updatedAt,
++    };
++    const profile: BrandingProfile = {
++      id: 'business-profile',
++      companyName: 'Northwind Trading Co',
++      legalName: null,
++      abnTaxId: '12 345 678 901',
++      address: '12 Harbour Street, Sydney NSW 2000',
++      email: 'accounts@northwind.example',
++      phone: '+61 2 9000 1200',
++      logoReference: null,
++      brandKitId: null,
++      logoAssetPath: null,
++      primaryColor: '#1F4D45',
++      secondaryColor: '#B08A4F',
++      updatedAt: invoice.updatedAt,
++    };
++
++    const pdf = await generateTemplatedInvoicePdfBuffer({
++      template,
++      invoice,
++      lineItems,
++      customer,
++      businessProfile: profile,
++    });
++    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
++    expect(pdf.length).toBeGreaterThan(1000);
++  });
++});
+-- 
+2.43.0
+
