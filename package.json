@@ -15,6 +15,7 @@
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.7",
     "clsx": "^2.1.1",
+    "imagetracerjs": "^1.2.6",
     "jszip": "^3.10.1",
     "lucide-react": "^1.25.0",
     "mupdf": "^1.28.0",
@@ -22,6 +23,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sharp": "^0.35.3",
+    "ssim.js": "^3.5.0",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"
   },
@@ -31,6 +33,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
+    "@types/potrace": "^2.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.3",

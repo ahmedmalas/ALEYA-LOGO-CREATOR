@@ -10,8 +10,14 @@ import {
   resolveExactLogoText,
   type GenerationControls,
 } from "@/lib/logo/evolution";
+import {
+  compareLogoVisuals,
+  MirrorSimilarityError,
+  MIRROR_SIMILARITY_THRESHOLD,
+} from "@/lib/logo/similarity";
 import { summarizeReferencesForPrompt } from "@/lib/references/brief";
 import type { ReferenceAnalysis } from "@/lib/references/analysis-types";
+import { deriveSvgFromReconstruction } from "@/lib/references/reconstruct";
 import { sanitizeHexColor } from "@/lib/security/colors";
 import type {
   ConceptPalette,
@@ -321,7 +327,21 @@ function iconConceptFor(
   );
 }
 
-export function composeSvgConcepts(
+function getReconstruction(analysis: ReferenceAnalysis | null): {
+  svg: string;
+  pngBase64: string;
+  source: string;
+} | null {
+  if (!analysis?.reconstructedSvg?.trim()) return null;
+  return {
+    svg: analysis.reconstructedSvg,
+    pngBase64: analysis.referencePngBase64 || "",
+    source: analysis.reconstructionSource || "traced-raster",
+  };
+}
+
+/** @deprecated Prefer composeSvgConcepts — kept for narrow unit tests of primitive fallback. */
+export function composePrimitiveConcepts(
   brief: LogoBrief,
   count = 4,
   seed = "seed",
@@ -337,8 +357,6 @@ export function composeSvgConcepts(
   const fonts = STYLE_FONTS[style];
   const markKind = inferMarkKind(analysis, brief);
   const groups = CONCEPT_GROUPS.slice(0, Math.min(Math.max(count, 1), CONCEPT_GROUPS.length));
-
-  // Prefer selected mode's group first, then remaining in studio order.
   const ordered = [
     ...groups.filter((g) => g.mode === controls.mode),
     ...groups.filter((g) => g.mode !== controls.mode),
@@ -361,7 +379,9 @@ export function composeSvgConcepts(
       mono,
       simplify: controls.simplification + (group.mode === "advance" ? 15 : 0),
       modernisation: controls.modernisation + (group.mode === "advance" ? 20 : 0),
-      showLetter: markKind === "letter" || /monogram|letter/.test(`${analysis?.logoMark || ""}`.toLowerCase()),
+      showLetter:
+        markKind === "letter" ||
+        /monogram|letter/.test(`${analysis?.logoMark || ""}`.toLowerCase()),
     });
     const body = renderLayout({
       logoText,
@@ -380,36 +400,19 @@ export function composeSvgConcepts(
   <rect width="512" height="512" fill="transparent"/>
   ${body}
 </svg>`;
-
     const iconConcept = iconConceptFor(analysis, brief, markKind, group.label);
-    const prompt = buildEvolutionPrompt({
-      brief,
-      controls,
-      group,
-      analysis,
-      logoText,
-      layout,
-      palette: [palette.primary, palette.secondary, palette.accent],
-      iconConcept,
-    });
-    const similarity = Math.round(
-      Math.min(
-        99,
-        Math.max(
-          20,
-          (controls.similarity + group.similarity) / 2 +
-            (controls.preserveLayout ? 3 : 0) +
-            (controls.preserveSymbol ? 3 : 0) -
-            (group.mode === "explore" ? controls.creativity * 0.08 : 0),
-        ),
-      ),
-    );
-    const retained = describeRetention({ group, controls, analysis, logoText });
-    const improved = describeImprovements({ group, controls, analysis });
-
     return {
       title: group.label,
-      prompt,
+      prompt: buildEvolutionPrompt({
+        brief,
+        controls,
+        group,
+        analysis,
+        logoText,
+        layout,
+        palette: [palette.primary, palette.secondary, palette.accent],
+        iconConcept,
+      }),
       iconConcept,
       layout,
       palette,
@@ -417,51 +420,199 @@ export function composeSvgConcepts(
       svgMarkup,
       provider: "svg-composer",
       providerMetadata: {
-        seed: `${seed}:${group.id}:${hashSeed(seed + group.id)}`,
-        variant: i,
-        algorithm: "aleya-svg-evolution-v1",
+        seed: `${seed}:${group.id}`,
+        algorithm: "aleya-svg-primitive-fallback",
         conceptGroup: group.id,
         conceptGroupLabel: group.label,
         generationMode: controls.mode,
         groupMode: group.mode,
-        similarityLevel: similarity,
-        retained,
-        improved,
         logoText,
         markKind,
         controls,
         referenceIds: (brief.references ?? []).map((r) => r.id),
         referenceFilenames: (brief.references ?? []).map((r) => r.filename),
-        referenceSummary: summarizeReferencesForPrompt(brief.references),
       },
     };
   });
 }
 
-export function composeRefinedConcept(
+/**
+ * Reference-conditioned evolution:
+ * 1) faithful redraw from reconstructed SVG paths
+ * 2) Refine / Advance / Explore derived from that redraw (no generic symbol swap)
+ * 3) Mirror fails if SSIM vs reference is below threshold
+ */
+export async function composeSvgConcepts(
+  brief: LogoBrief,
+  count = 4,
+  seed = "seed",
+  controlsInput?: Partial<GenerationControls> | null,
+): Promise<GeneratedConcept[]> {
+  const controls = defaultGenerationControls({
+    ...brief.generationControls,
+    ...controlsInput,
+  });
+  const analysis = primaryReferenceAnalysis(brief.references);
+  const logoText = resolveExactLogoText(brief, controls, analysis);
+  const style = mapStyleDirection(controls.styleDirection, analysis, brief.style);
+  const fonts = STYLE_FONTS[style];
+  const recon = getReconstruction(analysis);
+  const groups = CONCEPT_GROUPS.slice(0, Math.min(Math.max(count, 1), CONCEPT_GROUPS.length));
+  const ordered = [
+    ...groups.filter((g) => g.mode === controls.mode),
+    ...groups.filter((g) => g.mode !== controls.mode),
+  ].slice(0, Math.min(count, 4));
+
+  // Without a reconstruction we cannot meet the visual Mirror standard.
+  if (!recon) {
+    if (controls.mode === "mirror" || controls.mode === "refine" || controls.mode === "advance") {
+      throw new Error(
+        "Reference reconstruction is required for Mirror / Refine / Advance. Re-run analysis on an image or SVG logo first.",
+      );
+    }
+    return composePrimitiveConcepts(brief, count, seed, controls);
+  }
+
+  const faithfulSvg = deriveSvgFromReconstruction(recon.svg, "mirror", {
+    modernisation: controls.modernisation,
+    simplification: controls.simplification,
+    preserveColours: controls.preserveColours,
+    palette: analysis?.colourPalette,
+  });
+
+  // Visual similarity gate on the faithful redraw (conditioning target).
+  let mirrorReport = null as Awaited<ReturnType<typeof compareLogoVisuals>> | null;
+  if (recon.pngBase64) {
+    const refPng = Buffer.from(recon.pngBase64, "base64");
+    mirrorReport = await compareLogoVisuals(refPng, faithfulSvg, {
+      threshold: MIRROR_SIMILARITY_THRESHOLD,
+    });
+    if (!mirrorReport.passed) {
+      throw new MirrorSimilarityError(
+        mirrorReport,
+        `Mirror redraw drifted too far from the reference (SSIM ${mirrorReport.ssim.toFixed(3)} < ${mirrorReport.threshold}). Generic substitute symbols are not accepted — re-upload a clearer logo or re-run analysis.`,
+      );
+    }
+  }
+
+  const layout = mapAnalysisLayout(analysis, brief.layoutDirection);
+  const palette = buildPalette(brief, controls, analysis, 0);
+  const concepts: GeneratedConcept[] = [];
+
+  for (let i = 0; i < ordered.length; i += 1) {
+    const group = ordered[i]!;
+    const svgMarkup = deriveSvgFromReconstruction(faithfulSvg, group.mode, {
+      modernisation: controls.modernisation,
+      simplification: controls.simplification,
+      creativity: controls.creativity,
+      preserveColours: controls.preserveColours,
+      palette: analysis?.colourPalette,
+    }).replace(
+      'data-reconstruction="true"',
+      `data-reconstruction="true" data-concept-group="${group.id}" data-group-mode="${group.mode}"`,
+    );
+
+    let visualScore: number = group.similarity;
+    if (recon.pngBase64 && (group.mode === "mirror" || group.mode === "refine")) {
+      const report = await compareLogoVisuals(Buffer.from(recon.pngBase64, "base64"), svgMarkup);
+      visualScore = report.score;
+      if (group.mode === "mirror" && !report.passed) {
+        throw new MirrorSimilarityError(report);
+      }
+    }
+
+    const iconConcept =
+      analysis?.logoMark ||
+      analysis?.symbolGeometry ||
+      "Reconstructed reference mark (traced paths)";
+    const prompt = [
+      buildEvolutionPrompt({
+        brief,
+        controls,
+        group,
+        analysis,
+        logoText,
+        layout,
+        palette: [palette.primary, palette.secondary, palette.accent],
+        iconConcept,
+      }),
+      "CONDITIONING: use reconstructed SVG paths traced from the uploaded reference — do not invent a different symbol.",
+      recon.source ? `Reconstruction source: ${recon.source}` : null,
+      analysis?.fontGuess ? `Font guess: ${analysis.fontGuess}` : null,
+      analysis?.fontCategoryMatch ? `Font category: ${analysis.fontCategoryMatch}` : null,
+      mirrorReport
+        ? `Faithful redraw SSIM vs reference: ${mirrorReport.ssim.toFixed(3)} (threshold ${mirrorReport.threshold})`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    concepts.push({
+      title: group.label,
+      prompt,
+      iconConcept,
+      layout,
+      palette,
+      typography: {
+        display: analysis?.fontGuess || fonts.display,
+        body: fonts.body,
+      },
+      svgMarkup,
+      provider: "svg-composer",
+      providerMetadata: {
+        seed: `${seed}:${group.id}:${hashSeed(seed + group.id)}`,
+        variant: i,
+        algorithm: "aleya-svg-redraw-v2",
+        conceptGroup: group.id,
+        conceptGroupLabel: group.label,
+        generationMode: controls.mode,
+        groupMode: group.mode,
+        similarityLevel: visualScore,
+        visualSsim: mirrorReport?.ssim ?? null,
+        retained: describeRetention({ group, controls, analysis, logoText }),
+        improved: describeImprovements({ group, controls, analysis }),
+        logoText,
+        markKind: "reconstructed-paths",
+        reconstructionSource: recon.source,
+        conditionedOnReference: true,
+        controls,
+        referenceIds: (brief.references ?? []).map((r) => r.id),
+        referenceFilenames: (brief.references ?? []).map((r) => r.filename),
+        referenceSummary: summarizeReferencesForPrompt(brief.references),
+      },
+    });
+  }
+
+  return concepts;
+}
+
+export async function composeRefinedConcept(
   brief: LogoBrief,
   base: GeneratedConcept,
   instruction: string,
-): GeneratedConcept {
-  const baseControls = (base.providerMetadata?.controls as GenerationControls | undefined) ??
+): Promise<GeneratedConcept> {
+  const baseControls =
+    (base.providerMetadata?.controls as GenerationControls | undefined) ??
     brief.generationControls;
-  const next = composeSvgConcepts(
-    {
-      ...brief,
-      generationControls: defaultGenerationControls({
-        ...baseControls,
-        mode: "refine",
-        improve: instruction,
-        exactLogoText:
-          (base.providerMetadata?.logoText as string | undefined) ||
-          baseControls?.exactLogoText ||
-          brief.businessName,
-      }),
-      iconIdeas: `${brief.iconIdeas ?? base.iconConcept}; refine: ${instruction}`,
-      layoutDirection: base.layout,
-    },
-    1,
-    `${base.title}:${instruction}`,
+  const next = (
+    await composeSvgConcepts(
+      {
+        ...brief,
+        generationControls: defaultGenerationControls({
+          ...baseControls,
+          mode: "refine",
+          improve: instruction,
+          exactLogoText:
+            (base.providerMetadata?.logoText as string | undefined) ||
+            baseControls?.exactLogoText ||
+            brief.businessName,
+        }),
+        iconIdeas: `${brief.iconIdeas ?? base.iconConcept}; refine: ${instruction}`,
+        layoutDirection: base.layout,
+      },
+      1,
+      `${base.title}:${instruction}`,
+    )
   )[0]!;
 
   return {

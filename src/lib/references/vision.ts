@@ -87,7 +87,9 @@ Return ONLY valid JSON matching this shape:
   "brandMood": string,
   "distinctiveElements": string[],
   "weakAreasToImprove": string[],
-  "similarityConstraints": string
+  "similarityConstraints": string,
+  "fontGuess": string,
+  "fontCategoryMatch": string
 }
 Rules:
 - existingLogoText must be the exact visible logo wording (correct spelling/casing).
@@ -96,6 +98,7 @@ Rules:
 - distinctiveElements = traits that must be retained for recognisability.
 - weakAreasToImprove = production flaws (kerning, alignment, inconsistent strokes).
 - similarityConstraints = what a faithful recreation must keep.
+- fontGuess = closest known font family if identifiable; fontCategoryMatch = serif/sans/display/script/mono.
 - Do not invent trademarks that are not visible.`;
 
 function sanitizeProviderError(detail: string) {

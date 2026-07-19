@@ -44,7 +44,11 @@ export class OpenAIImageProvider implements ImageProvider {
   async generateConcepts(request: GenerateRequest): Promise<GeneratedConcept[]> {
     const count = Math.min(Math.max(request.count, 1), 4);
     // Vector scaffolds remain the editable source; AI produces concept art references when available.
-    const scaffolds = composeSvgConcepts(request.brief, count, request.seed ?? crypto.randomUUID());
+    const scaffolds = await composeSvgConcepts(
+      request.brief,
+      count,
+      request.seed ?? crypto.randomUUID(),
+    );
     const results: GeneratedConcept[] = [];
 
     for (const scaffold of scaffolds) {
@@ -72,7 +76,11 @@ export class OpenAIImageProvider implements ImageProvider {
   }
 
   async refineConcept(request: RefineRequest): Promise<GeneratedConcept> {
-    const scaffold = composeRefinedConcept(request.brief, request.concept, request.instruction);
+    const scaffold = await composeRefinedConcept(
+      request.brief,
+      request.concept,
+      request.instruction,
+    );
     const image = await this.generateImage(scaffold.prompt);
     return {
       ...scaffold,

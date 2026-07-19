@@ -10,6 +10,6 @@ export class SvgCompositionProvider implements ImageProvider {
   }
 
   async refineConcept(request: RefineRequest) {
-    return composeRefinedConcept(request.brief, request.concept, request.instruction);
+    return await composeRefinedConcept(request.brief, request.concept, request.instruction);
   }
 }

@@ -157,10 +157,42 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.action === "confirm_analysis") {
       const parsed = parseConfirmedAnalysis(body.analysisConfirmed);
       if (!parsed) return jsonError("Invalid analysis payload", 400);
+      // Preserve reconstruction payload (SVG paths / reference raster) when users edit text fields.
+      const rows = await listProjectReferences(supabase, projectId, user.id);
+      const existing = rows.find((row) => row.id === body.referenceId);
+      if (!existing) return jsonError("Reference not found", 404);
+      const prior = (existing.analysis_confirmed_json ||
+        existing.analysis_json ||
+        {}) as Record<string, unknown>;
+      const merged = {
+        ...parsed,
+        reconstructedSvg:
+          parsed.reconstructedSvg ||
+          (typeof prior.reconstructedSvg === "string" ? prior.reconstructedSvg : ""),
+        referencePngBase64:
+          parsed.referencePngBase64 ||
+          (typeof prior.referencePngBase64 === "string" ? prior.referencePngBase64 : ""),
+        reconstructionSource:
+          parsed.reconstructionSource ||
+          (typeof prior.reconstructionSource === "string" ? prior.reconstructionSource : ""),
+        reconstructionPathCount:
+          parsed.reconstructionPathCount ||
+          (typeof prior.reconstructionPathCount === "number" ? prior.reconstructionPathCount : 0),
+        colourRegions: parsed.colourRegions?.length
+          ? parsed.colourRegions
+          : Array.isArray(prior.colourRegions)
+            ? prior.colourRegions
+            : [],
+        segments: parsed.segments?.length
+          ? parsed.segments
+          : Array.isArray(prior.segments)
+            ? prior.segments
+            : [],
+      };
       const { data, error } = await supabase
         .from("project_references")
         .update({
-          analysis_confirmed_json: parsed,
+          analysis_confirmed_json: merged,
           updated_at: new Date().toISOString(),
         })
         .eq("id", body.referenceId)

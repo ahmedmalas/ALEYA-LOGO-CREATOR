@@ -44,6 +44,46 @@ export const referenceAnalysisSchema = z.object({
   distinctiveElements: stringList,
   weakAreasToImprove: stringList,
   similarityConstraints: z.string().default(""),
+  /** Font identification hints from vision / glyph comparison. */
+  fontGuess: z.string().default(""),
+  fontCategoryMatch: z.string().default(""),
+  /** Editable SVG rebuilt from the reference (paths), when available. */
+  reconstructedSvg: z.string().default(""),
+  reconstructionSource: z.string().default(""),
+  reconstructionPathCount: z.number().int().nonnegative().default(0),
+  /** 512px white-flattened reference PNG (base64) for conditioning + similarity. */
+  referencePngBase64: z.string().default(""),
+  colourRegions: z
+    .array(
+      z.object({
+        hex: z.string(),
+        pixelCount: z.number(),
+        role: z.string(),
+        bbox: z.object({
+          x: z.number(),
+          y: z.number(),
+          width: z.number(),
+          height: z.number(),
+        }),
+      }),
+    )
+    .default([]),
+  segments: z
+    .array(
+      z.object({
+        id: z.string(),
+        role: z.string(),
+        colour: z.string(),
+        bbox: z.object({
+          x: z.number(),
+          y: z.number(),
+          width: z.number(),
+          height: z.number(),
+        }),
+        pathCount: z.number().default(0),
+      }),
+    )
+    .default([]),
 });
 
 export type ReferenceAnalysis = z.infer<typeof referenceAnalysisSchema>;
