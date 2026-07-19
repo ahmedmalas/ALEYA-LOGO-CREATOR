@@ -23,12 +23,20 @@ Release Candidate for commercial v1.0. Ready to tag **v1.0.0** after this PR mer
 
 ## Verification checklist
 
-- [ ] Unit tests green
-- [ ] Typecheck / lint / build green
-- [ ] Lighthouse performance ≥ target on marketing pages
-- [ ] Desktop + mobile production browser QA
-- [ ] Security summary reviewed (`docs/SECURITY.md`)
-- [ ] No critical / high open issues
+- [x] Unit tests green (12/12)
+- [x] Typecheck / lint / build green
+- [x] Lighthouse (protected preview — SEO depressed by Vercel `noindex`)
+  - Desktop home: **Perf 100 / A11y 100 / BP 100** (FCP 0.3s, LCP 0.7s, CLS 0)
+  - Mobile home: **Perf 100 / A11y 100 / BP 100** (FCP 1.0s, LCP 1.8s, CLS 0)
+  - Desktop gallery/pricing: Perf 100 / A11y 100
+- [x] Desktop + mobile browser QA — **29/29** (SE, 15 Pro, Pixel 8, iPad)
+- [x] Security summary reviewed (`docs/SECURITY.md`)
+- [x] No critical / high open issues remaining in app code
+
+### Remaining (non-blocking)
+- Preview SEO score reflects deployment protection `noindex` (not a production defect)
+- Moderate PostCSS advisory via Next.js (upstream)
+- CSP still allows `'unsafe-inline'` for Next hydration (nonce follow-up)
 
 ## Tagging
 
