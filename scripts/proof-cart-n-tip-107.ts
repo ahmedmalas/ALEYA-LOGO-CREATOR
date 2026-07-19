@@ -51,6 +51,7 @@ async function main() {
   expectContains(mirrorHtml, "FROM");
   expectContains(mirrorHtml, "Amount excl GST");
   expectContains(mirrorHtml, "Thank you");
+  expectContains(mirrorHtml, "FOR YOUR BUSINESS");
   expectContains(mirrorHtml, "2,310.00");
   if (mirror.layoutProfile !== "quantum-hire") {
     throw new Error("Mirror template must use quantum-hire layoutProfile");

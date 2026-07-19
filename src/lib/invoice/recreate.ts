@@ -205,6 +205,23 @@ function buildQuantumHireRegions(
       editable: true,
     },
     {
+      id: "parties-vdivider",
+      type: "decorative",
+      label: "Parties vertical divider",
+      bounds: { x: 297, y: 168, width: 2, height: 88 },
+      style: {
+        fontFamily: "Helvetica",
+        fontSize: 1,
+        fontWeight: "normal",
+        color: "#111111",
+        align: "left",
+        borderColor: "#111111",
+        borderWidth: 1,
+      },
+      binding: "",
+      editable: false,
+    },
+    {
       id: "parties-divider",
       type: "decorative",
       label: "Parties divider",
@@ -589,7 +606,7 @@ export function buildInvoiceTemplate(
       summary: analysis.summary,
       confidence: analysis.confidence,
       layoutProfile: quantum ? "quantum-hire" : "generic",
-      footer: analysis.footer || (quantum ? "Thank you" : ""),
+      footer: analysis.footer || (quantum ? "Thank you\nFOR YOUR BUSINESS" : ""),
       detectedFields: [
         "company",
         "customer",
@@ -643,7 +660,9 @@ export function renderInvoiceHtml(
   const quantum = template.layoutProfile === "quantum-hire";
   const footerText =
     (typeof template.analysis?.footer === "string" && template.analysis.footer) ||
-    (quantum ? "Thank you" : `${data.company.name} · Thank you for your business`);
+    (quantum
+      ? "Thank you\nFOR YOUR BUSINESS"
+      : `${data.company.name} · Thank you for your business`);
 
   const rows = data.items
     .map((item) => {
@@ -682,7 +701,8 @@ export function renderInvoiceHtml(
   .title-block h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: 0.04em; }
   .title-block .meta { font-size: 10px; line-height: 1.55; color: #333; white-space: pre-line; }
   .rule { border: 0; border-top: 1.25px solid #111; margin: 18px 0; }
-  .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .parties { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 20px; align-items: start; }
+  .vdiv { background: #111; width: 1px; min-height: 88px; }
   .section-label { font-size: 11px; font-weight: 700; margin: 0 0 6px; letter-spacing: 0.06em; }
   .party-name { font-size: 12px; font-weight: 700; color: ${t.primaryColor}; margin: 0 0 4px; }
   .muted { color: #333; font-size: 11px; line-height: 1.45; white-space: pre-line; }
@@ -700,8 +720,10 @@ export function renderInvoiceHtml(
   .totals .grand-label { font-size: 10px; color: #666; margin-top: 4px; }
   .thankyou {
     margin-top: 36px; text-align: center; font-family: "Times New Roman", Times, serif;
-    font-style: italic; font-size: 28px; color: ${t.primaryColor};
+    font-style: italic; color: ${t.primaryColor}; white-space: pre-line; line-height: 1.25;
   }
+  .thankyou .line1 { font-size: 26px; display: block; }
+  .thankyou .line2 { font-size: 12px; letter-spacing: 0.14em; display: block; margin-top: 4px; }
   .mode-tag { position: absolute; top: 10px; left: 10px; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
 </style>
 </head>
@@ -728,6 +750,7 @@ Terms: ${escapeHtml(data.terms || "14 days")}</div>
         <div class="muted">${escapeHtml(data.customer.address)}
 ${escapeHtml(data.customer.email)}</div>
       </div>
+      <div class="vdiv" data-region="parties-vdivider" aria-hidden="true"></div>
       <div data-region="company">
         <p class="section-label">FROM</p>
         <p class="party-name">${escapeHtml(data.company.name)}</p>
@@ -764,7 +787,17 @@ ${escapeHtml(data.company.phone)}</div>
         <div class="grand-label">TOTAL INC GST</div>
       </div>
     </div>
-    <div class="thankyou" data-region="footer">${escapeHtml(footerText)}</div>
+    <div class="thankyou" data-region="footer">${
+      footerText.includes("\n")
+        ? footerText
+            .split("\n")
+            .map(
+              (line, i) =>
+                `<span class="line${i + 1}">${escapeHtml(line)}</span>`,
+            )
+            .join("")
+        : `<span class="line1">${escapeHtml(footerText)}</span>`
+    }</div>
   </article>
 </body>
 </html>`;

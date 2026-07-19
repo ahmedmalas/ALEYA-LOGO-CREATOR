@@ -89,8 +89,10 @@ describe("Cart N Tip #107 Quantum Hire acceptance layout", () => {
     expect(html).toContain("BILL TO");
     expect(html).toContain("FROM");
     expect(html).toContain("Thank you");
+    expect(html).toContain("FOR YOUR BUSINESS");
     expect(html).toContain("2,310.00");
     expect(html).toContain("PAYMENT DETAILS");
+    expect(template.regions.some((r) => r.id === "parties-vdivider")).toBe(true);
   });
 
   it("builds a real PDF fixture for /invoices upload", async () => {

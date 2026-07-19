@@ -109,7 +109,7 @@ export function cartNTip107Analysis(): InvoiceAnalysis {
     bankDetails: "BSB 062-000  Account 1098 7765",
     notes: "Labour hire for Cart N Tip operations — June 2026.",
     terms: "Payment due within 14 days.",
-    footer: "Thank you",
+    footer: "Thank you\nFOR YOUR BUSINESS",
     typography: "quantum-hire",
     confidence: 0.92,
     summary: "Quantum Hire TAX INVOICE #107 for Cart N Tip Pty Ltd — total 2310.00",
@@ -185,6 +185,7 @@ export function cartNTip107PlainText(): string {
     "Notes",
     a.notes,
     "Thank you",
+    "FOR YOUR BUSINESS",
   ].join("\n");
 }
 
@@ -250,7 +251,9 @@ export async function renderCartNTip107Png(): Promise<Buffer> {
   <text x="555" y="708" text-anchor="end" font-size="11" fill="#333">$${a.tax.toFixed(2)}</text>
   <text x="555" y="748" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#0F2D26">$${a.total.toFixed(2)}</text>
   <text x="555" y="768" text-anchor="end" font-size="10" fill="#666">TOTAL INC GST</text>
-  <text x="297" y="810" text-anchor="middle" font-family="Times, 'Times New Roman', serif" font-size="28" font-style="italic" fill="#0F2D26">Thank you</text>
+  <line x1="297" y1="168" x2="297" y2="255" stroke="#111" stroke-width="1"/>
+  <text x="297" y="800" text-anchor="middle" font-family="Times, 'Times New Roman', serif" font-size="26" font-style="italic" fill="#0F2D26">Thank you</text>
+  <text x="297" y="822" text-anchor="middle" font-family="Times, 'Times New Roman', serif" font-size="12" font-style="italic" letter-spacing="2" fill="#0F2D26">FOR YOUR BUSINESS</text>
 </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
@@ -421,10 +424,25 @@ export async function buildCartNTip107Pdf(): Promise<Buffer> {
     color: muted,
   });
 
+  // Vertical divider between BILL TO / FROM
+  page.drawLine({
+    start: { x: 297, y: 720 },
+    end: { x: 297, y: 650 },
+    thickness: 1,
+    color: black,
+  });
+
   page.drawText("Thank you", {
     x: 230,
-    y: 70,
-    size: 26,
+    y: 78,
+    size: 24,
+    font: timesItalic,
+    color: dark,
+  });
+  page.drawText("FOR YOUR BUSINESS", {
+    x: 205,
+    y: 56,
+    size: 11,
     font: timesItalic,
     color: dark,
   });

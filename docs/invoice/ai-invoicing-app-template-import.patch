@@ -1,7 +1,7 @@
 From e157b1ed09219335c914c2cc1e2aabb06d0181e4 Mon Sep 17 00:00:00 2001
 From: Cursor Agent <cursoragent@cursor.com>
 Date: Sun, 19 Jul 2026 11:21:20 +0000
-Subject: [PATCH 1/2] Import ALEYA invoice templates and render templated PDFs
+Subject: [PATCH 1/3] Import ALEYA invoice templates and render templated PDFs
 
 Add aleya.invoiceTemplate import API, store the active template on invoice
 preferences, and route invoice PDF generation through the template layout
@@ -815,7 +815,7 @@ index 0000000..ca3afe3
 From 444a8e3fc4d66686ba2d5fcda010595e51a4cd4f Mon Sep 17 00:00:00 2001
 From: Cursor Agent <cursoragent@cursor.com>
 Date: Sun, 19 Jul 2026 11:40:17 +0000
-Subject: [PATCH 2/2] Render Quantum Hire / Cart N Tip templates from ALEYA
+Subject: [PATCH 2/3] Render Quantum Hire / Cart N Tip templates from ALEYA
  imports
 
 Honor black table headers, BILL TO/FROM split, payment/totals layout,
@@ -1445,6 +1445,83 @@ index 598535f..8ea9692 100644
        doc
          .font('Helvetica')
          .fontSize(10)
+-- 
+2.43.0
+
+
+From 33454458a761d4cbe7812aee33ec1ab93236cca9 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sun, 19 Jul 2026 20:05:26 +0000
+Subject: [PATCH 3/3] Add vertical parties divider and FOR YOUR BUSINESS footer
+
+Align Quantum Hire templated PDF chrome with Cart N Tip acceptance
+checklist: BILL TO/FROM vertical rule and two-line handwritten footer.
+---
+ .../src/services/template-invoice-pdf.ts      | 32 ++++++++++++++++---
+ 1 file changed, 27 insertions(+), 5 deletions(-)
+
+diff --git a/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts b/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
+index 8ea9692..324d9ef 100644
+--- a/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
++++ b/ai-invoicing-app-standalone/src/services/template-invoice-pdf.ts
+@@ -123,7 +123,7 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+         .font('Helvetica-Bold')
+         .fontSize(11)
+         .fillColor(primary)
+-        .text(input.customer.displayName, margins.left, 184, { width: 250 });
++        .text(input.customer.displayName, margins.left, 184, { width: 240 });
+       doc
+         .font('Helvetica')
+         .fontSize(10)
+@@ -132,9 +132,17 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+           [input.customer.address, input.customer.email].filter(Boolean).join('\n'),
+           margins.left,
+           200,
+-          { width: 250 },
++          { width: 240 },
+         );
+ 
++      // Vertical divider between BILL TO / FROM
++      doc
++        .strokeColor('#111111')
++        .lineWidth(1)
++        .moveTo(297, 168)
++        .lineTo(297, 255)
++        .stroke();
++
+       const companyName = profile?.companyName || 'Quantum Hire';
+       doc.fillColor(text).font('Helvetica-Bold').fontSize(10).text('FROM', 320, 168);
+       doc
+@@ -265,12 +273,26 @@ export function generateTemplatedInvoicePdfBuffer(input: {
+ 
+       const thankYou =
+         (typeof input.template.analysis?.footer === 'string' && input.template.analysis.footer) ||
+-        'Thank you';
++        'Thank you\nFOR YOUR BUSINESS';
++      const thankLines = thankYou.split(/\n/).map((l) => l.trim()).filter(Boolean);
+       doc
+         .font('Times-Italic')
+-        .fontSize(28)
++        .fontSize(26)
+         .fillColor(primary)
+-        .text(thankYou, margins.left, 760, { width: 515, align: 'center' });
++        .text(thankLines[0] || 'Thank you', margins.left, 755, { width: 515, align: 'center' });
++      if (thankLines[1]) {
++        doc
++          .font('Times-Italic')
++          .fontSize(11)
++          .fillColor(primary)
++          .text(thankLines[1], margins.left, 785, { width: 515, align: 'center' });
++      } else {
++        doc
++          .font('Times-Italic')
++          .fontSize(11)
++          .fillColor(primary)
++          .text('FOR YOUR BUSINESS', margins.left, 785, { width: 515, align: 'center' });
++      }
+ 
+       doc.end();
+       return;
 -- 
 2.43.0
 

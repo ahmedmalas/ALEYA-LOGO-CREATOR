@@ -1,4 +1,8 @@
 import { analyseInvoiceDocument } from "@/lib/invoice/analyse-invoice";
+import {
+  cartNTip107Analysis,
+  cartNTip107PlainText,
+} from "@/lib/invoice/cart-n-tip-fixture";
 import { northwindInvoiceAnalysis, northwindInvoicePlainText } from "@/lib/invoice/fixture";
 import { preparePdfForAnalysis } from "@/lib/references/pdf";
 import { handleRouteError, jsonError } from "@/lib/security/api";
@@ -8,8 +12,8 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 /**
- * Analyse an uploaded invoice (multipart) or run the Northwind fixture when
- * `?fixture=northwind` is provided (proof / demo path).
+ * Analyse an uploaded invoice (multipart) or run a known fixture when
+ * `?fixture=northwind|cart-n-tip-107` is provided (proof / demo path).
  */
 export async function POST(request: Request) {
   try {
@@ -20,13 +24,25 @@ export async function POST(request: Request) {
     if (!user) return jsonError("Unauthorized", 401);
 
     const url = new URL(request.url);
-    if (url.searchParams.get("fixture") === "northwind") {
+    const fixture = url.searchParams.get("fixture");
+    if (fixture === "northwind") {
       const analysis = northwindInvoiceAnalysis();
       return NextResponse.json({
         documentType: "invoice",
         analysis,
         text: northwindInvoicePlainText(),
         source: "fixture",
+      });
+    }
+    if (fixture === "cart-n-tip-107") {
+      const analysis = cartNTip107Analysis();
+      return NextResponse.json({
+        documentType: "invoice",
+        analysis,
+        text: cartNTip107PlainText(),
+        source: "fixture",
+        fixtureNote:
+          "Criteria-reconstructed Cart N Tip #107 — owner-uploaded original PDF not present in this environment",
       });
     }
 

@@ -165,7 +165,11 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
     bankDetails: paymentInstructions,
     notes,
     terms,
-    footer: quantum ? "Thank you" : companyName ? `Generated for ${companyName}` : "",
+    footer: quantum
+      ? "Thank you\nFOR YOUR BUSINESS"
+      : companyName
+        ? `Generated for ${companyName}`
+        : "",
     typography: quantum ? "quantum-hire" : "sans-serif",
     layoutProfile: quantum ? "quantum-hire" : "generic",
     confidence: invoiceNumber || items.length ? 0.72 : 0.45,
