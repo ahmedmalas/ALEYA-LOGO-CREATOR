@@ -1,6 +1,7 @@
 "use client";
 
 import { PasswordField } from "@/components/auth/password-field";
+import { BrandHomeLink } from "@/components/brand-home-link";
 import { createClient } from "@/lib/supabase/client";
 import { safeInternalPath } from "@/lib/security/safe-path";
 import Link from "next/link";
@@ -44,9 +45,9 @@ function LoginForm() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
       <div className="panel animate-rise rounded-3xl p-8 shadow-sm">
-        <Link href="/" className="brand text-3xl text-[var(--forest-deep)]">
+        <BrandHomeLink className="brand text-3xl text-[var(--forest-deep)]">
           ALEYA
-        </Link>
+        </BrandHomeLink>
         <h1 className="mt-2 text-xl">Sign in to Logo Creator</h1>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <label className="field">

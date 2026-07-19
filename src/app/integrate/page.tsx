@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandHomeLink } from "@/components/brand-home-link";
 import { verifyClientLaunchParams } from "@/lib/integration/client-launch";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -59,9 +60,9 @@ function IntegrateInner() {
   return (
     <div className="mx-auto flex min-h-screen max-w-lg items-center px-4">
       <div className="panel w-full rounded-3xl p-8">
-        <Link href="/" className="brand text-3xl text-[var(--forest-deep)]">
+        <BrandHomeLink className="brand text-3xl text-[var(--forest-deep)]">
           ALEYA
-        </Link>
+        </BrandHomeLink>
         <h1 className="mt-2 text-xl">Opening Logo Creator…</h1>
         {error ? (
           <div className="mt-4 space-y-3">

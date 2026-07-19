@@ -1,3 +1,4 @@
+import { BrandHomeLink } from "@/components/brand-home-link";
 import Link from "next/link";
 
 export function AppShell({
@@ -10,12 +11,15 @@ export function AppShell({
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 md:px-8">
       <header className="mb-8 flex flex-wrap items-center justify-between gap-3 animate-rise">
-        <Link href="/dashboard" className="brand text-2xl tracking-tight text-[var(--forest-deep)]">
+        <BrandHomeLink
+          initialSignedIn
+          className="brand text-2xl tracking-tight text-[var(--forest-deep)]"
+        >
           ALEYA
           <span className="ml-2 text-base font-normal tracking-normal text-black/55">
             Logo Creator
           </span>
-        </Link>
+        </BrandHomeLink>
         <nav
           className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"
           aria-label="App"
