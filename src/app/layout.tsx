@@ -5,11 +5,15 @@ import "./globals.css";
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 });
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://aleya-logo-creator.vercel.app";

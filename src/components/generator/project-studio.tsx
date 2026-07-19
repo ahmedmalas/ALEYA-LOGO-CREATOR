@@ -291,6 +291,7 @@ export function ProjectStudio({
                 <div
                   className="flex min-h-56 items-center justify-center p-6"
                   style={{ background: previewMode === "light" ? "#F7F4EF" : "#121212" }}
+                  role="img"
                   aria-label={`${concept.title} logo preview`}
                   dangerouslySetInnerHTML={{
                     __html: concept.svg_markup ?? "<p>No preview</p>",

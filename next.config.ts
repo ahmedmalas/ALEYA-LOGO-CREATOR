@@ -12,8 +12,8 @@ const csp = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   // Next.js requires inline scripts for hydration; keep script hosts tight.
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vercel.live",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vercel.live https://*.vercel.live",
   "worker-src 'self' blob:",
 ].join("; ");
 

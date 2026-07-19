@@ -38,11 +38,8 @@ export default function HomePage() {
         />
         <SiteHeader tone="dark" />
         <section className="mx-auto flex min-h-[calc(100svh-5rem)] w-full max-w-6xl flex-col justify-end px-4 pb-16 pt-10 md:px-8">
-          <p className="brand animate-rise text-5xl text-[#f6f0e4] md:text-7xl">ALEYA</p>
-          <h1
-            className="mt-3 max-w-xl animate-rise text-2xl font-medium text-[#f6f0e4] md:text-3xl"
-            style={{ animationDelay: "80ms" }}
-          >
+          <p className="brand text-5xl text-[#f6f0e4] md:text-7xl">ALEYA</p>
+          <h1 className="mt-3 max-w-xl text-2xl font-medium text-[#f6f0e4] md:text-3xl">
             Logo Creator
           </h1>
           <p

@@ -134,28 +134,34 @@ export function BrandKitEditor({
           </label>
           <div>
             <p className="mb-2 text-sm font-medium">Primary colours</p>
-            <div className="flex flex-wrap gap-2">
+            <div
+              className="flex flex-wrap gap-2"
+              aria-label={`Primary colours ${kit.primary_colors.join(", ")}`}
+            >
               {kit.primary_colors.map((c) => (
                 <span
                   key={c}
                   className="h-10 w-10 rounded-full border border-black/10"
                   style={{ background: c }}
                   title={c}
-                  aria-label={`Primary colour ${c}`}
+                  aria-hidden
                 />
               ))}
             </div>
           </div>
           <div>
             <p className="mb-2 text-sm font-medium">Secondary colours</p>
-            <div className="flex flex-wrap gap-2">
+            <div
+              className="flex flex-wrap gap-2"
+              aria-label={`Secondary colours ${kit.secondary_colors.join(", ")}`}
+            >
               {kit.secondary_colors.map((c) => (
                 <span
                   key={c}
                   className="h-10 w-10 rounded-full border border-black/10"
                   style={{ background: c }}
                   title={c}
-                  aria-label={`Secondary colour ${c}`}
+                  aria-hidden
                 />
               ))}
             </div>
