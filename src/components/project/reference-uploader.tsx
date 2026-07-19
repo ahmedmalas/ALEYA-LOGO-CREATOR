@@ -176,7 +176,10 @@ export function ReferenceUploader({
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ projectId: string }>).detail;
-      if (detail?.projectId) void flushPendingUploads(detail.projectId);
+      if (!detail?.projectId) return;
+      void flushPendingUploads(detail.projectId).finally(() => {
+        window.dispatchEvent(new CustomEvent("aleya:flush-references-done"));
+      });
     };
     window.addEventListener("aleya:flush-references", handler as EventListener);
     return () => window.removeEventListener("aleya:flush-references", handler as EventListener);

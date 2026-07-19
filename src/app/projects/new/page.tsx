@@ -66,11 +66,18 @@ function NewProjectForm() {
       }
       const projectId = json.project.id as string;
       setStatus("Project saved. Uploading queued references…");
+      const flushDone = new Promise<void>((resolve) => {
+        const onDone = () => {
+          window.removeEventListener("aleya:flush-references-done", onDone);
+          resolve();
+        };
+        window.addEventListener("aleya:flush-references-done", onDone);
+        window.setTimeout(onDone, 15000);
+      });
       window.dispatchEvent(
         new CustomEvent("aleya:flush-references", { detail: { projectId } }),
       );
-      // Give uploads a short window, then open the studio (uploads continue there if needed).
-      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      await flushDone;
       router.push(`/projects/${projectId}`);
     } catch {
       setError("Could not create the project. Check your connection and try again.");
