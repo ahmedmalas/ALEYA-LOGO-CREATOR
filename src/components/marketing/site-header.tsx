@@ -38,7 +38,7 @@ export async function SiteHeader({
               onDark ? "text-[#f6f0e4]/opacity-80" : "text-black/55"
             }`}
           >
-            Logo Creator
+            Invoice Studio
           </span>
         </BrandHomeLink>
         <nav
@@ -56,11 +56,18 @@ export async function SiteHeader({
                 Dashboard
               </Link>
               <Link
+                href="/invoices"
+                className={`min-h-10 inline-flex items-center px-1 ${navClass}`}
+                data-cta-label="Invoice templates"
+              >
+                Invoice templates
+              </Link>
+              <Link
                 href="/projects/new"
                 className={`min-h-10 inline-flex items-center px-1 ${navClass}`}
                 data-cta-label="Create New Logo"
               >
-                Create New Logo
+                Logo tools
               </Link>
               <Link
                 href="/account/profile"

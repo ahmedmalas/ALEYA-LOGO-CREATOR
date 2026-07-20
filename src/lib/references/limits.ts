@@ -38,4 +38,4 @@ export function isAllowedReferenceMime(mime: string): mime is ReferenceMimeType 
 }
 
 export const REFERENCE_HELP_TEXT =
-  "Upload real files — current logos, packaging photos, sketches, receipts, screenshots, or inspiration images (PNG, JPG, WEBP, SVG, PDF). Optional notes help ALEYA interpret each file; notes alone are not enough.";
+  "For invoice templates: upload a full invoice PDF or image. For legacy logo tools: logos, packaging, or inspiration (PNG, JPG, WEBP, SVG, PDF).";

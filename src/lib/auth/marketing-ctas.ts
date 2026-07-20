@@ -11,9 +11,9 @@ export function signedOutPrimaryCtas(): MarketingCta[] {
 
 export function signedInPrimaryCtas(): MarketingCta[] {
   return [
+    { label: "Invoice templates", href: "/invoices" },
     { label: "Go to Dashboard", href: "/dashboard" },
-    { label: "Create New Logo", href: "/projects/new" },
-    { label: "View My Projects", href: "/dashboard#projects" },
+    { label: "Logo tools", href: "/projects/new" },
   ];
 }
 
@@ -25,8 +25,8 @@ export function primaryMarketingCtas(signedIn: boolean): MarketingCta[] {
 export function finalBandCtas(signedIn: boolean): MarketingCta[] {
   if (signedIn) {
     return [
+      { label: "Invoice templates", href: "/invoices" },
       { label: "Go to Dashboard", href: "/dashboard" },
-      { label: "Create New Logo", href: "/projects/new" },
       { label: "Browse examples", href: "/gallery" },
     ];
   }

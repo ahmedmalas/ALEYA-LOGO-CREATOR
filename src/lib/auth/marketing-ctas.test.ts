@@ -21,9 +21,9 @@ describe("marketing CTAs", () => {
   it("signed-in homepage CTAs never include Sign In or Get Started", () => {
     const ctas = primaryMarketingCtas(true);
     expect(labels(ctas)).toEqual([
+      "Invoice templates",
       "Go to Dashboard",
-      "Create New Logo",
-      "View My Projects",
+      "Logo tools",
     ]);
     for (const forbidden of FORBIDDEN_SIGNED_IN_CTA_LABELS) {
       expect(labels(ctas)).not.toContain(forbidden);
