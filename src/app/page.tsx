@@ -17,9 +17,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "ALEYA Logo Creator",
+  title: "ALEYA — Invoice reconstruction & templates",
   description:
-    "Generate distinct brand marks, refine concepts, and export reusable Brand Kits with SVG and PNG assets.",
+    "Upload an invoice, recreate the full page as an editable template, and export a package for Aleya Invoicing.",
   alternates: { canonical: "/" },
 };
 
@@ -64,13 +64,14 @@ export default async function HomePage() {
         <section className="mx-auto flex min-h-[calc(100svh-5rem)] w-full max-w-6xl flex-col justify-end px-4 pb-16 pt-10 md:px-8">
           <p className="brand text-5xl text-[#f6f0e4] md:text-7xl">ALEYA</p>
           <h1 className="mt-3 max-w-xl text-2xl font-medium text-[#f6f0e4] md:text-3xl">
-            Logo Creator
+            Invoice reconstruction
           </h1>
           <p
             className="mt-3 max-w-lg animate-rise text-[#efe7d8]"
             style={{ animationDelay: "140ms" }}
           >
-            Generate distinct brand marks, refine concepts, and export a reusable Brand Kit.
+            Analyse a full invoice, recreate it as an editable template, and export it for Aleya
+            Invoicing — logos stay one element inside the page.
           </p>
           <MarketingCtaGroup
             ctas={heroCtas}
