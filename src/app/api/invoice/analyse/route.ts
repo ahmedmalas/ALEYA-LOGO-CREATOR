@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         text: cartNTip107PlainText(),
         source: "fixture",
         fixtureNote:
-          "Criteria-reconstructed Cart N Tip #107 — owner-uploaded original PDF not present in this environment",
+          "Exact owner-uploaded Cart N Tip #107.pdf (Cart_N_Tip__107_111b.pdf)",
       });
     }
 

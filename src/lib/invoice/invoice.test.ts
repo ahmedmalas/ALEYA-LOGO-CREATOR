@@ -69,7 +69,7 @@ describe("Cart N Tip #107 Quantum Hire acceptance layout", () => {
   it("detects quantum-hire layout from Cart N Tip text", () => {
     const analysis = analyseInvoiceFromText(cartNTip107PlainText());
     expect(analysis.layoutProfile).toBe("quantum-hire");
-    expect(analysis.customerName).toMatch(/Cart N Tip/i);
+    expect(analysis.customerName).toMatch(/Cart and Tip/i);
     expect(analysis.invoiceNumber).toMatch(/107/);
   });
 
@@ -78,11 +78,11 @@ describe("Cart N Tip #107 Quantum Hire acceptance layout", () => {
     expect(template.layoutProfile).toBe("quantum-hire");
     expect(template.table.headerBackground.toLowerCase()).toBe("#111111");
     expect(template.table.columns.map((c) => c.header)).toEqual([
-      "Date",
-      "Description",
-      "Quantity",
-      "Rate",
-      "Amount excl GST",
+      "DATE",
+      "DESCRIPTION",
+      "QTY",
+      "RATE",
+      "AMOUNT (EX GST)",
     ]);
     expect(template.regions.some((r) => r.label === "From" || r.id === "company")).toBe(true);
     const html = renderInvoiceHtml(template);
@@ -95,9 +95,10 @@ describe("Cart N Tip #107 Quantum Hire acceptance layout", () => {
     expect(template.regions.some((r) => r.id === "parties-vdivider")).toBe(true);
   });
 
-  it("builds a real PDF fixture for /invoices upload", async () => {
+  it("loads the exact uploaded Cart N Tip #107 PDF fixture", async () => {
     const pdf = await buildCartNTip107Pdf();
     expect(pdf.subarray(0, 4).toString("utf8")).toBe("%PDF");
+    expect(pdf.length).toBeGreaterThan(100_000);
     const png = await renderCartNTip107Png();
     expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
   });

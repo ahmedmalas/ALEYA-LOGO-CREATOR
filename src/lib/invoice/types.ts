@@ -152,6 +152,8 @@ export const invoiceTemplateSchema = z.object({
   assets: z
     .object({
       logo: z.string().optional(),
+      /** Inline PNG/JPEG for import into Aleya Invoicing renderer. */
+      logoDataUrl: z.string().optional(),
     })
     .default({}),
 });

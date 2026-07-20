@@ -88,10 +88,29 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
 
   const billIdx = lines.findIndex((l) => /bill\s*to|customer|client/i.test(l));
   const fromIdx = lines.findIndex((l) => /^from\b/i.test(l));
-  const customerName = billIdx >= 0 ? lines[billIdx + 1] || "" : "";
+  const isPartyLabel = (l: string) =>
+    /^(bill\s*to|from|ship\s*to|customer|client|payment|please\s*note|date|description|qty|rate|amount|terms|invoice)/i.test(
+      l.replace(/:$/, ""),
+    );
+  const nextPartyName = (start: number) => {
+    for (let i = start + 1; i < Math.min(start + 8, lines.length); i++) {
+      const l = lines[i]!;
+      if (!l || isPartyLabel(l)) continue;
+      if (/^(m|e|abn|p):/i.test(l)) continue;
+      return l;
+    }
+    return "";
+  };
+  const customerName = billIdx >= 0 ? nextPartyName(billIdx) : "";
   const customerAddress =
-    billIdx >= 0 ? lines.slice(billIdx + 2, billIdx + 5).join(", ") : "";
-  const fromName = fromIdx >= 0 ? lines[fromIdx + 1] || "" : "";
+    billIdx >= 0
+      ? lines
+          .slice(billIdx + 1, billIdx + 8)
+          .filter((l) => l && l !== customerName && !isPartyLabel(l) && !/^(m|e|abn):/i.test(l))
+          .slice(0, 3)
+          .join(", ")
+      : "";
+  const fromName = fromIdx >= 0 ? nextPartyName(fromIdx) : "";
 
   const paymentIdx = lines.findIndex((l) => /payment|bank|bsb|account/i.test(l));
   const paymentInstructions =
@@ -110,8 +129,10 @@ export function analyseInvoiceFromText(text: string): InvoiceAnalysis {
 
   const quantum =
     /quantum\s*hire/i.test(joined) ||
-    /cart\s*n\s*tip/i.test(joined) ||
-    (/amount\s*excl/i.test(joined) && /\bbill\s*to\b/i.test(joined) && /\bfrom\b/i.test(joined));
+    /cart\s*(n|and)\s*tip/i.test(joined) ||
+    (/amount\s*\(?\s*ex\.?\s*gst\s*\)?/i.test(joined) &&
+      /\bbill\s*to\b/i.test(joined) &&
+      /\bfrom\b/i.test(joined));
 
   const resolvedCompany = quantum
     ? fromName || companyName || "Quantum Hire"

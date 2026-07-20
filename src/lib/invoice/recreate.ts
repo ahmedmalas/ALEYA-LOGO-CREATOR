@@ -517,33 +517,33 @@ export function buildInvoiceTemplate(
 
   const columns = quantum
     ? [
-        { id: "date", header: headers[0] || "Date", binding: "date", width: 70, align: "left" as const },
+        { id: "date", header: headers[0] || "DATE", binding: "date", width: 80, align: "left" as const },
         {
           id: "description",
-          header: headers[1] || "Description",
+          header: headers[1] || "DESCRIPTION",
           binding: "description",
-          width: 220,
+          width: 210,
           align: "left" as const,
         },
         {
           id: "quantity",
-          header: headers[2] || "Quantity",
+          header: headers[2] || "QTY",
           binding: "quantity",
-          width: 65,
-          align: "right" as const,
+          width: 45,
+          align: "center" as const,
         },
         {
           id: "unitPrice",
-          header: headers[3] || "Rate",
+          header: headers[3] || "RATE",
           binding: "unitPrice",
-          width: 65,
+          width: 75,
           align: "right" as const,
         },
         {
           id: "total",
-          header: headers[4] || "Amount excl GST",
+          header: headers[4] || "AMOUNT (EX GST)",
           binding: "lineSubtotal",
-          width: 95,
+          width: 105,
           align: "right" as const,
         },
       ]
@@ -642,10 +642,10 @@ function cellValue(
   if (binding === "date") return item.date || "";
   if (binding === "description") return item.description;
   if (binding === "quantity") return String(item.quantity);
-  if (binding === "unitPrice") return formatMoney(item.unitPrice);
-  if (binding === "tax") return formatMoney(item.tax);
-  if (binding === "lineSubtotal") return formatMoney(item.quantity * item.unitPrice);
-  if (binding === "total") return formatMoney(item.total);
+  if (binding === "unitPrice") return `$${formatMoney(item.unitPrice)}`;
+  if (binding === "tax") return `$${formatMoney(item.tax)}`;
+  if (binding === "lineSubtotal") return `$${formatMoney(item.quantity * item.unitPrice)}`;
+  if (binding === "total") return `$${formatMoney(item.total)}`;
   return "";
 }
 
@@ -677,6 +677,13 @@ export function renderInvoiceHtml(
     .join("");
 
   if (quantum) {
+    const fromLines = [
+      data.company.phone ? `M: ${data.company.phone}` : "",
+      data.company.email ? `E: ${data.company.email}` : "",
+      data.company.abn ? `ABN: ${data.company.abn}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -685,45 +692,52 @@ export function renderInvoiceHtml(
 <style>
   @page { size: ${template.page.size} ${template.page.orientation}; margin: 0; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #d9ddd9; font-family: "IBM Plex Sans", Helvetica, sans-serif; color: ${t.textColor}; }
+  body { margin: 0; background: #d9ddd9; font-family: Helvetica, Arial, sans-serif; color: ${t.textColor}; }
   .page {
     width: ${pageW}pt; min-height: ${pageH}pt; margin: 24px auto; background: ${t.backgroundColor};
     padding: ${template.page.margins.top}pt ${template.page.margins.right}pt ${template.page.margins.bottom}pt ${template.page.margins.left}pt;
     position: relative; box-shadow: 0 12px 40px rgba(15,42,37,0.14);
   }
-  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 28px; }
+  .brand-stack { display: flex; align-items: stretch; gap: 18px; max-width: 58%; }
   .qh-mark {
-    width: 110px; height: 56px; background: ${t.primaryColor}; color: ${t.secondaryColor};
-    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 28px; letter-spacing: 0.04em;
+    width: 160px; min-height: 120px; background: transparent; color: ${t.primaryColor};
+    display: flex; align-items: flex-start; justify-content: flex-start; font-weight: 700; font-size: 28px;
   }
-  .qh-mark img { max-width: 100%; max-height: 100%; object-fit: contain; }
-  .title-block { text-align: right; }
-  .title-block h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: 0.04em; }
-  .title-block .meta { font-size: 10px; line-height: 1.55; color: #333; white-space: pre-line; }
-  .rule { border: 0; border-top: 1.25px solid #111; margin: 18px 0; }
-  .parties { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 20px; align-items: start; }
-  .vdiv { background: #111; width: 1px; min-height: 88px; }
-  .section-label { font-size: 11px; font-weight: 700; margin: 0 0 6px; letter-spacing: 0.06em; }
-  .party-name { font-size: 12px; font-weight: 700; color: ${t.primaryColor}; margin: 0 0 4px; }
-  .muted { color: #333; font-size: 11px; line-height: 1.45; white-space: pre-line; }
-  table.items { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 8px; }
+  .qh-mark img { max-width: 160px; max-height: 140px; object-fit: contain; }
+  .header-vdiv { width: 1px; background: #C8C8C8; align-self: stretch; min-height: 110px; }
+  .title-block { text-align: left; min-width: 210px; padding-top: 4px; }
+  .title-block h1 { margin: 0 0 12px; font-size: 22px; letter-spacing: 0.04em; font-weight: 800; }
+  .title-block .meta-row { display: grid; grid-template-columns: 120px 1fr; gap: 8px; font-size: 10px; line-height: 1.7; margin-bottom: 2px; }
+  .title-block .meta-row .lab { font-weight: 700; }
+  .rule { border: 0; border-top: 1px solid #C8C8C8; margin: 18px 0; }
+  .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  .section-label { font-size: 11px; font-weight: 700; margin: 0 0 8px; letter-spacing: 0.04em; }
+  .party-name { font-size: 12px; font-weight: 700; color: #111; margin: 0 0 6px; }
+  .muted { color: #222; font-size: 11px; line-height: 1.5; white-space: pre-line; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 4px; }
   table.items th {
     background: ${template.table.headerBackground}; color: ${template.table.headerTextColor};
     text-align: left; padding: 9px 6px; font-weight: 700;
   }
   table.items th.num, table.items td.num { text-align: right; }
-  table.items td { padding: 9px 6px; border-bottom: 1px solid #111; vertical-align: top; }
-  .bottom { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; margin-top: 28px; }
-  .totals { text-align: right; }
-  .totals .row { display: flex; justify-content: flex-end; gap: 24px; font-size: 11px; margin-bottom: 6px; }
-  .totals .grand { font-size: 28px; font-weight: 700; color: ${t.primaryColor}; margin-top: 10px; line-height: 1; }
-  .totals .grand-label { font-size: 10px; color: #666; margin-top: 4px; }
+  table.items th.center, table.items td.center { text-align: center; }
+  table.items td { padding: 9px 6px; border-bottom: 1px solid #E5E5E5; vertical-align: top; }
+  .bottom { display: grid; grid-template-columns: 1.15fr 1px 0.85fr; gap: 20px; margin-top: 28px; align-items: start; }
+  .bottom-vdiv { background: #C8C8C8; width: 1px; min-height: 140px; }
+  .totals .row { display: grid; grid-template-columns: 1fr auto; gap: 16px; font-size: 10px; margin-bottom: 8px; }
+  .totals .row .lab { font-weight: 700; }
+  .totals .grand-lab { font-size: 11px; font-weight: 700; margin-top: 10px; }
+  .totals .grand { font-size: 28px; font-weight: 800; color: #111; margin-top: 6px; line-height: 1; text-align: right; }
+  .please { margin-top: 18px; }
+  .please .section-label { margin-bottom: 4px; }
+  .thanks-plain { margin-top: 10px; font-size: 11px; color: #333; }
   .thankyou {
-    margin-top: 36px; text-align: center; font-family: "Times New Roman", Times, serif;
-    font-style: italic; color: ${t.primaryColor}; white-space: pre-line; line-height: 1.25;
+    margin-top: 28px; text-align: right; font-family: "Times New Roman", Times, serif;
+    font-style: italic; color: #9CA3AF; white-space: pre-line; line-height: 1.2;
   }
-  .thankyou .line1 { font-size: 26px; display: block; }
-  .thankyou .line2 { font-size: 12px; letter-spacing: 0.14em; display: block; margin-top: 4px; }
+  .thankyou .line1 { font-size: 24px; display: block; }
+  .thankyou .line2 { font-size: 10px; letter-spacing: 0.14em; display: block; margin-top: 4px; font-family: Helvetica, Arial, sans-serif; font-style: normal; color: #6B7280; }
   .mode-tag { position: absolute; top: 10px; left: 10px; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
 </style>
 </head>
@@ -731,32 +745,34 @@ export function renderInvoiceHtml(
   <article class="page" data-template-format="${template.format}" data-source-mode="${template.sourceMode}" data-layout="quantum-hire">
     <div class="mode-tag">${escapeHtml(template.sourceMode)} recreation</div>
     <div class="top">
-      <div data-region="logo" data-binding="{{company.logo}}" class="qh-mark">
-        ${data.company.logo ? `<img alt="QH" src="${escapeHtml(data.company.logo)}"/>` : "QH"}
+      <div class="brand-stack">
+        <div data-region="logo" data-binding="{{company.logo}}" class="qh-mark">
+          ${data.company.logo ? `<img alt="Quantum Hire logo" src="${escapeHtml(data.company.logo)}"/>` : "QH"}
+        </div>
+        <div class="header-vdiv" data-region="header-vdivider" aria-hidden="true"></div>
       </div>
       <div class="title-block" data-region="title">
         <h1>${escapeHtml(data.invoice.title)}</h1>
-        <div class="meta" data-region="invoice-meta">Invoice #: ${escapeHtml(data.invoice.number)}
-Invoice Date: ${escapeHtml(data.invoice.issueDate)}
-Due Date: ${escapeHtml(data.invoice.dueDate)}
-Terms: ${escapeHtml(data.terms || "14 days")}</div>
+        <div data-region="invoice-meta">
+          <div class="meta-row"><span class="lab">INVOICE NUMBER:</span><span>#${escapeHtml(data.invoice.number)}</span></div>
+          <div class="meta-row"><span class="lab">INVOICE DATE:</span><span>${escapeHtml(data.invoice.issueDate)}</span></div>
+          <div class="meta-row"><span class="lab">DUE DATE:</span><span>${escapeHtml(data.invoice.dueDate)}</span></div>
+          <div class="meta-row"><span class="lab">TERMS:</span><span>${escapeHtml(data.terms || "7 Days")}</span></div>
+        </div>
       </div>
     </div>
     <hr class="rule" data-region="header-divider"/>
     <div class="parties">
       <div data-region="customer">
-        <p class="section-label">BILL TO</p>
+        <p class="section-label">BILL TO:</p>
         <p class="party-name">${escapeHtml(data.customer.name)}</p>
         <div class="muted">${escapeHtml(data.customer.address)}
 ${escapeHtml(data.customer.email)}</div>
       </div>
-      <div class="vdiv" data-region="parties-vdivider" aria-hidden="true"></div>
       <div data-region="company">
-        <p class="section-label">FROM</p>
+        <p class="section-label">FROM:</p>
         <p class="party-name">${escapeHtml(data.company.name)}</p>
-        <div class="muted">${escapeHtml(data.company.address)}
-ABN: ${escapeHtml(data.company.abn)}
-${escapeHtml(data.company.phone)}</div>
+        <div class="muted">${escapeHtml(fromLines)}</div>
       </div>
     </div>
     <hr class="rule" data-region="parties-divider"/>
@@ -765,10 +781,11 @@ ${escapeHtml(data.company.phone)}</div>
         <thead>
           <tr>
             ${template.table.columns
-              .map(
-                (c) =>
-                  `<th class="${c.align === "right" ? "num" : ""}">${escapeHtml(c.header)}</th>`,
-              )
+              .map((c) => {
+                const cls =
+                  c.align === "right" ? "num" : c.align === "center" ? "center" : "";
+                return `<th class="${cls}">${escapeHtml(c.header)}</th>`;
+              })
               .join("")}
           </tr>
         </thead>
@@ -777,27 +794,33 @@ ${escapeHtml(data.company.phone)}</div>
     </div>
     <div class="bottom">
       <div data-region="payment">
-        <p class="section-label">PAYMENT DETAILS</p>
+        <p class="section-label">PAYMENT DETAILS:</p>
         <div class="muted">${escapeHtml(data.payment.instructions || "—")}</div>
+        <div class="please">
+          <p class="section-label">PLEASE NOTE:</p>
+          <div class="muted">${escapeHtml(data.notes || "—")}</div>
+          <div class="thanks-plain">Thank you for your business.</div>
+        </div>
       </div>
+      <div class="bottom-vdiv" data-region="parties-vdivider" aria-hidden="true"></div>
       <div class="totals" data-region="totals">
-        <div class="row"><span>Subtotal</span><span>$${formatMoney(data.subtotal)}</span></div>
-        <div class="row"><span>GST (10%)</span><span>$${formatMoney(data.tax)}</span></div>
+        <div class="row"><span class="lab">SUBTOTAL (EX GST):</span><span>$${formatMoney(data.subtotal)}</span></div>
+        <div class="row"><span class="lab">GST (10%):</span><span>$${formatMoney(data.tax)}</span></div>
+        <div class="grand-lab">TOTAL (INC GST):</div>
         <div class="grand">$${formatMoney(data.total)}</div>
-        <div class="grand-label">TOTAL INC GST</div>
+        <div class="thankyou" data-region="footer">${
+          footerText.includes("\n")
+            ? footerText
+                .split("\n")
+                .map(
+                  (line, i) =>
+                    `<span class="line${i + 1}">${escapeHtml(line)}</span>`,
+                )
+                .join("")
+            : `<span class="line1">${escapeHtml(footerText)}</span>`
+        }</div>
       </div>
     </div>
-    <div class="thankyou" data-region="footer">${
-      footerText.includes("\n")
-        ? footerText
-            .split("\n")
-            .map(
-              (line, i) =>
-                `<span class="line${i + 1}">${escapeHtml(line)}</span>`,
-            )
-            .join("")
-        : `<span class="line1">${escapeHtml(footerText)}</span>`
-    }</div>
   </article>
 </body>
 </html>`;
